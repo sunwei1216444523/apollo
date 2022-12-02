@@ -103,6 +103,15 @@ bool ResultGenerator::IsReachableToWithChangeLane(
   return false;
 }
 
+
+/**
+*    passage_info[0]   -------|---------|----------|---------
+*    passage_info[1]   =======|=========|----------|---------
+*    passage_info[2]   =======|=========|==========|---------
+*     == 表示扩展新增的lane
+*     -- 表示 result中的原始base lane
+*     通过ExtendBackword/ExtendForward来扩展出这些 ==段
+*/
 void ResultGenerator::ExtendBackward(const TopoRangeManager& range_manager,
                                      const PassageInfo& prev_passage,
                                      PassageInfo* const curr_passage) {
