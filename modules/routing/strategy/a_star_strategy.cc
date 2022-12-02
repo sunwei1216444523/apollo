@@ -83,6 +83,10 @@ bool AdjustLaneChangeBackward(
              << ", " << to_node->EndS() << ")";
       return false;
     }
+    // sunwei: 1. For decrease the number of lane changes in result;
+    // 2. If must to make lane change, choose the longer lane.
+    // 1. 能直行绝对不变道
+    // 2. 即使逃不过变道，也要选择比较长的lane来变道
     if (from_to_edge->Type() != TopoEdgeType::TET_FORWARD) {
       if (base_node->EndS() - base_node->StartS() <
           from_node->EndS() - from_node->StartS()) {
