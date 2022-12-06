@@ -85,13 +85,18 @@ class TopoNode {
   Node pb_node_;
   common::PointENU anchor_point_;
 
+  // 一般都是初始化lane的头和尾
   double start_s_;
   double end_s_;
+  // 通过考虑左边界可能有一部分是双黄实线，有一部分是白虚线，那么就记录能够允许变道的部分的长度
   bool is_left_range_enough_;
+  // 记录的是允许左变道最长的部分
   int left_prefer_range_index_;
+  // 通过考虑右边界可能有一部分是双黄实线，有一部分是白虚线，那么就记录能够允许变道的部分的长度
   bool is_right_range_enough_;
   int right_prefer_range_index_;
 
+  // 考虑边界，记录左右变道所支持的段范围
   std::vector<NodeSRange> left_out_sorted_range_;
   std::vector<NodeSRange> right_out_sorted_range_;
 
