@@ -257,6 +257,20 @@ void ResultGenerator::ExtendPassages(const TopoRangeManager& range_manager,
       ExtendBackward(range_manager, passages->at(i - 1), &(passages->at(i)));
     }
   }
+  /**
+   *  此处需要进行第二次遍历为了针对以下场景
+   *    
+   *   --------|--------|====2===|                                   --------|-------
+   *            --------|====1===|                  --------|--------|
+   *            --------|--------|--------|~~~~~~~~|--------|
+   *            
+   *   ------ 原始lane 
+   *   ====== extend而来的lane
+   *   ～～～～ 原始lane，但是它周围没有任何lane能够通过变道进入该lane
+   *
+   *   以上情况下，通过第一次循环扩展并不能扩展出 2 这条lane，2的出现是在第一次循环之后出现1，然后等待第二次循环
+   *   就能出现2.
+   */
   for (int i = passage_num - 1; i >= 0; --i) {
     if (i < passage_num - 1) {
       ExtendForward(range_manager, passages->at(i + 1), &(passages->at(i)));
