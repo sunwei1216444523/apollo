@@ -379,6 +379,14 @@ void ResultGenerator::AddRoadSegment(
            << node_last_iter->StartS() << "; " << node_last_iter->EndS();
     auto node_end_iter = node_last_iter + 1;
     LaneNodesToPassageRegion(node_begin_iter, node_end_iter, passage);
+    /** 此处的 can_exit的含义就是能否由此passage进入下一个road的意思
+    * 
+    *  ======|===passage1(a)===|===passage1(b)===
+    *         ===passage2(a)===|===passage2(b)===
+    *         ===passage3(a)===|===passage3(b)===|=======| 
+    * 
+    * 以上场景中，passage1-3共同组成一个road,其中 passage1和passage2的can_exit=false, 而passage3的can_exit=true
+    */
     if (start_index.first == end_index.first) {
       passage->set_change_lane_type(FORWARD);
       passage->set_can_exit(true);
