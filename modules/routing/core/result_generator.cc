@@ -303,6 +303,8 @@ double CalculateDistance(const std::vector<NodeWithRange>& nodes) {
   for (size_t i = 1; i < nodes.size(); ++i) {
     auto edge =
         nodes.at(i - 1).GetTopoNode()->GetOutEdgeTo(nodes.at(i).GetTopoNode());
+    // 所以Apollo计算distance的方式也是放弃掉变道前一条的距离，直接加变道最后一条的距离
+       //   并且不考虑enter_s的，只考虑可通行区域的长度。
     if (edge == nullptr || edge->Type() != TET_FORWARD) {
       continue;
     }
