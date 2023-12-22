@@ -87,3 +87,9 @@ def apollo_repositories():
     pcl_configure(name = "local_config_pcl")
 
     initialize_third_party()
+
+def basic_repositories():
+    glog()
+    gflags()
+    protobuf()
+    gtest()
