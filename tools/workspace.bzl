@@ -93,3 +93,6 @@ def basic_repositories():
     gflags()
     protobuf()
     gtest()
+    absl()
+    tinyxml2()
+    proj()
