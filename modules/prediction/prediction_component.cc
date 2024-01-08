@@ -32,7 +32,7 @@
 #include "modules/prediction/proto/offline_features.pb.h"
 #include "modules/prediction/proto/prediction_conf.pb.h"
 #include "modules/prediction/scenario/scenario_manager.h"
-#include "modules/prediction/util/data_extraction.h"
+#include "modules/common/util/data_extraction.h"
 
 namespace apollo {
 namespace prediction {
@@ -60,6 +60,9 @@ void PredictionComponent::OfflineProcessFeatureProtoFile(
   for (const Feature& feature : features.feature()) {
     obstacles_container_ptr->InsertFeatureProto(feature);
     Obstacle* obstacle_ptr = obstacles_container_ptr->GetObstacle(feature.id());
+    if (!obstacle_ptr) {
+      continue;
+    }
     evaluator_manager_->EvaluateObstacle(obstacle_ptr, obstacles_container_ptr);
   }
 }
