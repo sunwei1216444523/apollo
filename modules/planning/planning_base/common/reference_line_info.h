@@ -76,6 +76,8 @@ class ReferenceLineInfo {
   ReferenceLine* mutable_reference_line();
 
   double SDistanceToDestination() const;
+  double SDistanceToRefEnd() const;
+
   bool ReachedDestination() const;
 
   void SetTrajectory(const DiscretizedTrajectory& trajectory);
@@ -149,6 +151,7 @@ class ReferenceLineInfo {
 
   const SLBoundary& AdcSlBoundary() const;
   std::string PathSpeedDebugString() const;
+  void PrintReferenceSegmentDebugString();
 
   /**
    * Check if the current reference line is a change lane reference line, i.e.,
@@ -201,7 +204,7 @@ class ReferenceLineInfo {
       std::vector<PathBoundary>&& candidate_path_boundaries);
 
   const std::vector<PathData>& GetCandidatePathData() const;
-
+  std::vector<PathData>* MutableCandidatePathData();
   void SetCandidatePathData(std::vector<PathData>&& candidate_path_data);
 
   Obstacle* GetBlockingObstacle() const { return blocking_obstacle_; }
@@ -240,6 +243,8 @@ class ReferenceLineInfo {
     SIGNAL = 5,
     STOP_SIGN = 6,
     YIELD_SIGN = 7,
+    JUNCTION = 8,
+    AREA = 9,
   };
 
   const std::vector<std::pair<OverlapType, hdmap::PathOverlap>>&
@@ -250,6 +255,7 @@ class ReferenceLineInfo {
   int GetPnCJunction(const double s,
                      hdmap::PathOverlap* pnc_junction_overlap) const;
   int GetJunction(const double s, hdmap::PathOverlap* junction_overlap) const;
+  int GetArea(const double s, hdmap::PathOverlap* area_overlap) const;
   std::vector<common::SLPoint> GetAllStopDecisionSLPoint() const;
 
   void SetTurnSignal(const common::VehicleSignal::TurnSignal& turn_signal);
@@ -262,6 +268,23 @@ class ReferenceLineInfo {
   bool path_reusable() const { return path_reusable_; }
   hdmap::PathOverlap* GetOverlapOnReferenceLine(
       const std::string& overlap_id, const OverlapType& overlap_type) const;
+
+  void set_key(std::size_t key) { key_ = key; }
+  std::size_t key() const { return key_; }
+
+  void set_index(std::size_t index) { index_ = index; }
+  std::size_t index() const { return index_; }
+
+  void set_id(std::string id) { id_ = id; }
+  std::string id() const { return id_; }
+
+  void GetRangeOverlaps(std::vector<hdmap::PathOverlap>* path_overlaps,
+                        double start_s, double end_s);
+
+  const std::vector<double>& reference_line_towing_l() const;
+  std::vector<double>* mutable_reference_line_towing_l();
+  const PathBoundary& reference_line_towing_path_boundary() const;
+  PathBoundary* mutable_reference_line_towing_path_boundary();
 
  private:
   void InitFirstOverlaps();
@@ -292,6 +315,8 @@ class ReferenceLineInfo {
   bool GetFirstOverlap(const std::vector<hdmap::PathOverlap>& path_overlaps,
                        hdmap::PathOverlap* path_overlap);
 
+  bool IsEgoOnRoutingLane() const;
+
  private:
   static std::unordered_map<std::string, bool> junction_right_of_way_map_;
   const common::VehicleState vehicle_state_;
@@ -312,6 +337,9 @@ class ReferenceLineInfo {
 
   std::vector<PathBoundary> candidate_path_boundaries_;
   std::vector<PathData> candidate_path_data_;
+
+  std::vector<double> reference_line_towing_l_;
+  PathBoundary reference_line_towing_path_boundary_;
 
   PathData path_data_;
   PathData fallback_path_data_;
@@ -365,6 +393,9 @@ class ReferenceLineInfo {
   double base_cruise_speed_ = 0.0;
 
   bool path_reusable_ = false;
+  std::string id_ = "";
+  std::size_t key_ = 0;
+  std::size_t index_ = 0;
 
   DISALLOW_COPY_AND_ASSIGN(ReferenceLineInfo);
 };

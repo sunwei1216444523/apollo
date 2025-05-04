@@ -23,17 +23,17 @@ DEFINE_double(localization_publish_freq, 100,
               "localization publishing frequency.");
 
 DEFINE_string(localization_config_file,
-              "/apollo/modules/localization/conf/localization_config.pb.txt",
+              "modules/localization/conf/localization_config.pb.txt",
               "localization config file");
 
 // features
 DEFINE_bool(enable_gps_imu_interprolate, true, "enable GPU/IMU interprolate");
 
 DEFINE_bool(enable_gps_imu_compensate, false,
-                "enable compensate of GPU/IMU timestamp");
+            "enable compensate of GPU/IMU timestamp");
 
 DEFINE_int32(gps_imu_compensate_ns_tolerance, 10000000,
-                "tolerance of GPU/IMU timestamp compensator");
+             "tolerance of GPU/IMU timestamp compensator");
 
 DEFINE_bool(enable_watchdog, true, "enable watchdog");
 
@@ -59,11 +59,11 @@ DEFINE_bool(enable_gps_timestamp, false,
 // msf parame
 DEFINE_string(local_map_name, "local_map", "The path of localization map.");
 DEFINE_string(lidar_extrinsics_file,
-              "/apollo/modules/localization/msf/params/velodyne_params/"
+              "modules/localization/msf/params/velodyne_params/"
               "velodyne64_novatel_extrinsics_example.yaml",
               "Lidar extrinsics parameter file.");
 DEFINE_string(lidar_height_file,
-              "/apollo/modules/localization/msf/params/velodyne_params/"
+              "modules/localization/msf/params/velodyne_params/"
               "velodyne64_height.yaml",
               "Velodyne extrinsic path for the vehicle in use, "
               "where <ros> is the placeholder of ROS root.");
@@ -99,7 +99,7 @@ DEFINE_bool(enable_ins_aid_rtk, false, "");
 DEFINE_string(eph_buffer_path, "", "");
 DEFINE_string(
     ant_imu_leverarm_file,
-    "/apollo/modules/localization/msf/params/gnss_params/ant_imu_leverarm.yaml",
+    "modules/localization/msf/params/gnss_params/ant_imu_leverarm.yaml",
     "Ant to imu leferarm.");
 DEFINE_bool(gnss_debug_log_flag, false, "Gnss Debug switch.");
 DEFINE_bool(if_imuant_from_file, true, "Use imu ant from gnss configure file.");
@@ -114,7 +114,7 @@ DEFINE_double(imu_to_ant_offset_uz, 0.0, "Imu ant offset z uncertainty");
 DEFINE_double(imu_rate, 1.0, "");
 DEFINE_bool(if_utm_zone_id_from_folder, true,
             "load utm zone id from local map folder");
-DEFINE_bool(trans_gpstime_to_utctime, true, "");
+DEFINE_bool(trans_gpstime_to_utctime, false, "");
 DEFINE_int32(gnss_mode, 0, "GNSS Mode, 0 for bestgnss pose, 1 for self gnss.");
 DEFINE_bool(imu_coord_rfu, true, "Right/forward/up");
 DEFINE_bool(gnss_only_init, false,
@@ -129,7 +129,7 @@ DEFINE_string(broadcast_tf_child_frame_id, "localization",
               "localization frame id in tf");
 // imu vehicle extrinsic
 DEFINE_string(vehicle_imu_file,
-              "/apollo/modules/localization/msf/params"
+              "modules/localization/msf/params"
               "/vehicle_params/vehicle_imu_extrinsics.yaml",
               "Vehicle coord to imu coord.");
 DEFINE_bool(if_vehicle_imu_from_file, true,

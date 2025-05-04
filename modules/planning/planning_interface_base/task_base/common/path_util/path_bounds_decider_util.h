@@ -24,6 +24,7 @@
 #include "modules/common/util/point_factory.h"
 #include "modules/planning/planning_base/common/path_boundary.h"
 #include "modules/planning/planning_base/common/reference_line_info.h"
+#include "modules/planning/planning_base/common/sl_polygon.h"
 
 namespace apollo {
 namespace planning {
@@ -37,8 +38,6 @@ enum class LaneBorrowInfo {
   NO_BORROW,
   RIGHT_BORROW,
 };
-
-constexpr double kPathBoundsDeciderHorizon = 100.0;
 
 class PathBoundsDeciderUtil {
  public:
@@ -107,8 +106,9 @@ class PathBoundsDeciderUtil {
    */
   static bool GetBoundaryFromStaticObstacles(
       const ReferenceLineInfo& reference_line_info,
-      const SLState& init_sl_state, PathBoundary* const path_boundaries,
-      std::string* const blocking_obstacle_id);
+      std::vector<SLPolygon>* const sl_polygons, const SLState& init_sl_state,
+      PathBoundary* const path_boundaries,
+      std::string* const blocking_obstacle_id, double* const narrowest_width);
 
   static std::vector<ObstacleEdge> SortObstaclesForSweepLine(
       const IndexedList<std::string, Obstacle>& indexed_obstacles,
@@ -158,6 +158,10 @@ class PathBoundsDeciderUtil {
       const ReferenceLineInfo& reference_line_info,
       const SLState& init_sl_state, PathBoundary* const path_bound);
 
+  static bool GetBoundaryFromRoad(const ReferenceLineInfo& reference_line_info,
+                                  const SLState& init_sl_state,
+                                  PathBoundary* const path_bound);
+
   /**
    * @brief extend boundary to include adc
    * @param init_sl_state adc init sl state
@@ -165,7 +169,8 @@ class PathBoundsDeciderUtil {
    * @param path_bound output path bound
    * @return
    */
-  static bool ExtendBoundaryByADC(const SLState& init_sl_state,
+  static bool ExtendBoundaryByADC(const ReferenceLineInfo& reference_line_info,
+                                  const SLState& init_sl_state,
                                   const double extend_buffer,
                                   PathBoundary* const path_bound);
   static void ConvertBoundarySAxisFromLaneCenterToRefLine(
@@ -174,6 +179,39 @@ class PathBoundsDeciderUtil {
   static int IsPointWithinPathBound(
       const ReferenceLineInfo& reference_line_info, const double x,
       const double y, const PathBound& path_bound);
+  static void GetSLPolygons(const ReferenceLineInfo& reference_line_info,
+                            std::vector<SLPolygon>* polygons,
+                            const SLState& init_sl_state);
+  static bool UpdatePathBoundaryBySLPolygon(
+      const ReferenceLineInfo& reference_line_info,
+      std::vector<SLPolygon>* const sl_polygon, const SLState& init_sl_state,
+      PathBoundary* const path_boundary, std::string* const blocked_id,
+      double* const narrowest_width);
+  static bool AddCornerPoint(double s, double l_lower, double l_upper,
+                             const PathBoundary& path_boundary,
+                             ObsCornerConstraints* extra_constraints);
+  static bool AddCornerPoint(SLPoint sl_pt, const PathBoundary& path_boundary,
+                             ObsCornerConstraints* extra_constraints,
+                             bool is_left, std::string obs_id,
+                             bool is_front_pt);
+  static void AddCornerBounds(const std::vector<SLPolygon>& sl_polygons,
+                              PathBoundary* const path_boundary);
+  static void AddAdcVertexBounds(PathBoundary* const path_boundary);
+  static bool RelaxBoundaryPoint(PathBoundPoint* const path_bound_point,
+                                 bool is_left, double init_l, double heading,
+                                 double delta_s, double init_frenet_kappa,
+                                 double min_radius);
+  static bool RelaxEgoPathBoundary(PathBoundary* const path_boundary,
+                                   const SLState& init_sl_state);
+  static bool RelaxObsCornerBoundary(PathBoundary* const path_boundary,
+                                     const SLState& init_sl_state);
+
+  static bool AddExtraPathBound(const std::vector<SLPolygon>& sl_polygons,
+                                PathBoundary* const path_boundary,
+                                const SLState& init_sl_state,
+                                std::string* const blocked_id);
+  static bool UpdateBlockInfoWithObsCornerBoundary(
+      PathBoundary* const path_boundary, std::string* const blocked_id);
 };
 
 }  // namespace planning

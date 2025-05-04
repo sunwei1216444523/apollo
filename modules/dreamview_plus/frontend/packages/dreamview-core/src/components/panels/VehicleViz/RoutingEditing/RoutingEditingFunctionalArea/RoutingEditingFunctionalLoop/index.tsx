@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { IconIcHelpNormal, Popover, Switch, InputNumber, message } from '@dreamview/dreamview-ui';
+import { IconPark, Popover, Switch, InputNumber, message } from '@dreamview/dreamview-ui';
 import { useTranslation } from 'react-i18next';
 import useStyle from './useStyle';
 import { useVizStore } from '../../../VizStore';
@@ -38,38 +38,6 @@ export default function RoutingEditingFunctionalLoop(props: RoutingEditingFuncti
         });
     };
 
-    // useEffect(() => {
-    //     const wayCount = routingEditor.pathwayMarker.positionsCount;
-    //     if (wayCount > 0) {
-    //         if (isMainConnected) {
-    //             mainApi.getStartPoint().then((res) => {
-    //                 const startPoint = { x: res.x, y: res.y, heading: res?.heading };
-    //                 const endPoint = routingEditor.pathwayMarker.lastPosition;
-    //                 mainApi.checkCycleRouting({ start: startPoint, end: endPoint }).then((cycle) => {
-    //                     if (cycle.isCycle) {
-    //                         setLoopDisable(false);
-    //                         if (routeManagerMix.getCurrentRouteMix().currentRouteLoop.currentRouteLoopState) {
-    //                             setChecked(true);
-    //                             setInputDisplay(true);
-    //                         }
-    //                     } else {
-    //                         const currentRouteMixValue = { currentRouteLoop: { currentRouteLoopState: false } };
-    //                         routeManagerMix.setCurrentRouteMix(currentRouteMixValue);
-    //                         setChecked(false);
-    //                         setLoopDisable(true);
-    //                         message({
-    //                             type: 'error',
-    //                             content: t('NoLoopMessage'),
-    //                         });
-    //                     }
-    //                 });
-    //             });
-    //         }
-    //     } else {
-    //         message({ type: 'error', content: t('NoWayPointMessage') });
-    //     }
-    // }, [isMainConnected]);
-
     return (
         <div className={classes['functional-loop-con']}>
             <div className={classes['functional-loop-switch']}>
@@ -84,7 +52,7 @@ export default function RoutingEditingFunctionalLoop(props: RoutingEditingFuncti
                     rootClassName={classes['functional-loop-switch-help']}
                 >
                     <div className={classes['functional-loop-switch-remind']}>
-                        <IconIcHelpNormal />
+                        <IconPark name='IcHelpNormal' />
                     </div>
                 </Popover>
             </div>

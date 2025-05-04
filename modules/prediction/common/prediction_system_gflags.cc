@@ -22,13 +22,13 @@
 DEFINE_string(prediction_module_name, "prediction",
               "Default prediction module name");
 DEFINE_string(prediction_conf_file,
-              "/apollo/modules/prediction/conf/prediction_conf.pb.txt",
+              "modules/prediction/conf/prediction_conf.pb.txt",
               "Default conf file for prediction");
 DEFINE_string(prediction_adapter_config_filename,
-              "/apollo/modules/prediction/conf/adapter.conf",
+              "modules/prediction/conf/adapter.conf",
               "Default conf file for prediction");
 DEFINE_string(prediction_data_dir,
-              "/apollo/modules/prediction/data/prediction/",
+              "modules/prediction/data/prediction/",
               "Prefix of files to store feature data");
 DEFINE_string(offline_feature_proto_file_name, "",
               "The bin file including a series of feature proto messages");
@@ -54,6 +54,9 @@ DEFINE_int32(prediction_offline_mode, 0,
              "3: dump predicted trajectory to predict_result.*.bin"
              "4: dump frame environment info to frame_env.*.bin"
              "5: dump data for tuning to datatuning.*.bin");
+DEFINE_bool(enable_multi_agent_pedestrian_evaluator, true, "If enable multi agent pedestrian evaluator.");
+DEFINE_bool(enable_multi_agent_vehicle_evaluator, true, "If enable multi agent vehicle evaluator.");
+DEFINE_bool(prediction_eval_mode, false, "Set prediction to eval mode");
 DEFINE_bool(enable_multi_thread, true, "If enable multi-thread.");
 DEFINE_int32(max_thread_num, 8, "Maximal number of threads.");
 DEFINE_int32(max_caution_thread_num, 2,
@@ -86,11 +89,11 @@ DEFINE_string(perception_obstacles_topic_name,
               "Internal topic of perception obstacles");
 
 // VectorNet
-DEFINE_string(prediction_target_file, "/apollo/data/train/test.pb.txt",
+DEFINE_string(prediction_target_file, "data/train/test.pb.txt",
               "VectorNet target pb file name");
-DEFINE_string(world_coordinate_file, "/apollo/data/world_coord.bin",
+DEFINE_string(world_coordinate_file, "data/world_coord.bin",
               "VectorNet world coordinate file name");
-DEFINE_string(prediction_target_dir, "/apollo/data/train/",
+DEFINE_string(prediction_target_dir, "data/train/",
               "VectorNet target dir");
 DEFINE_double(obstacle_x, 0.0, "obstacle position x");
 DEFINE_double(obstacle_y, 0.0, "obstacle position y");

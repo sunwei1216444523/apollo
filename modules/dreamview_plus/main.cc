@@ -14,13 +14,59 @@
  * limitations under the License.
  *****************************************************************************/
 
+#include <filesystem>
+
+#include "gperftools/heap-profiler.h"
+#include "gperftools/malloc_extension.h"
+#include "gperftools/profiler.h"
+
 #include "cyber/common/global_data.h"
 #include "cyber/init.h"
 #include "modules/dreamview_plus/backend/dreamview.h"
 
-int main(int argc, char *argv[]) {
+int main(int argc, char* argv[]) {
+  // set working directory to APOLLO_RUNTIME_PATH for relative file paths
+  const char* apollo_runtime_path = std::getenv("APOLLO_RUNTIME_PATH");
+  if (apollo_runtime_path != nullptr) {
+    if (std::filesystem::is_directory(
+            std::filesystem::status(apollo_runtime_path))) {
+      std::filesystem::current_path(apollo_runtime_path);
+    }
+  }
   google::ParseCommandLineFlags(&argc, &argv, true);
   // Added by caros to improve dv performance
+
+  std::signal(SIGTERM, [](int sig) {
+    apollo::cyber::OnShutdown(sig);
+    if (FLAGS_dv_cpu_profile) {
+      ProfilerStop();
+    }
+    if (FLAGS_dv_heap_profile) {
+      HeapProfilerDump("Befor shutdown");
+      HeapProfilerStop();
+    }
+  });
+
+  std::signal(SIGINT, [](int sig) {
+    apollo::cyber::OnShutdown(sig);
+    if (FLAGS_dv_cpu_profile) {
+      ProfilerStop();
+    }
+    if (FLAGS_dv_heap_profile) {
+      HeapProfilerDump("Befor shutdown");
+      HeapProfilerStop();
+    }
+  });
+
+  if (FLAGS_dv_cpu_profile) {
+    auto base_name_cpu = std::string(argv[0]) + "_cpu" + std::string(".prof");
+    ProfilerStart(base_name_cpu.c_str());
+  }
+  if (FLAGS_dv_heap_profile) {
+    auto base_name_heap = std::string(argv[0]) + "_heap" + std::string(".prof");
+    HeapProfilerStart(base_name_heap.c_str());
+  }
+
   apollo::cyber::GlobalData::Instance()->SetProcessGroup("dreamview_sched");
   apollo::cyber::Init(argv[0]);
 

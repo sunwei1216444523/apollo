@@ -18,6 +18,7 @@
 #include "cyber/common/file.h"
 #include "modules/common/adapters/adapter_gflags.h"
 #include "modules/common/configs/config_gflags.h"
+#include "modules/common/math/vec2d.h"
 #include "modules/common/util/message_util.h"
 #include "modules/common/util/util.h"
 #include "modules/map/hdmap/hdmap_util.h"
@@ -29,8 +30,11 @@
 namespace apollo {
 namespace planning {
 
+using apollo::common::math::Vec2d;
 using apollo::cyber::ComponentBase;
 using apollo::hdmap::HDMapUtil;
+
+using apollo::control::ControlInteractiveMsg;
 using apollo::perception::TrafficLightDetection;
 using apollo::relative_map::MapMsg;
 using apollo::routing::RoutingRequest;
@@ -91,6 +95,15 @@ bool PlanningComponent::Init() {
         ADEBUG << "Received story_telling data: run story_telling callback.";
         std::lock_guard<std::mutex> lock(mutex_);
         stories_.CopyFrom(*stories);
+      });
+
+  control_interactive_reader_ = node_->CreateReader<ControlInteractiveMsg>(
+      config_.topic_config().control_interative_topic(),
+      [this](const std::shared_ptr<ControlInteractiveMsg>&
+                 control_interactive_msg) {
+        ADEBUG << "Received story_telling data: run story_telling callback.";
+        std::lock_guard<std::mutex> lock(mutex_);
+        control_interactive_msg_.CopyFrom(*control_interactive_msg);
       });
 
   if (FLAGS_use_navigation_mode) {
@@ -163,6 +176,16 @@ bool PlanningComponent::Proc(
     std::lock_guard<std::mutex> lock(mutex_);
     local_view_.stories = std::make_shared<Stories>(stories_);
   }
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    if (!local_view_.control_interactive_msg ||
+        !common::util::IsProtoEqual(
+            local_view_.control_interactive_msg->header(),
+            control_interactive_msg_.header())) {
+      local_view_.control_interactive_msg =
+          std::make_shared<ControlInteractiveMsg>(control_interactive_msg_);
+    }
+  }
 
   if (!CheckInput()) {
     AINFO << "Input check failed";
@@ -204,6 +227,7 @@ bool PlanningComponent::Proc(
   auto start_time = adc_trajectory_pb.header().timestamp_sec();
   common::util::FillHeader(node_->Name(), &adc_trajectory_pb);
 
+  SetLocation(&adc_trajectory_pb);
   // modify trajectory relative time due to the timestamp change in header
   const double dt = start_time - adc_trajectory_pb.header().timestamp_sec();
   for (auto& p : *adc_trajectory_pb.mutable_trajectory_point()) {
@@ -218,13 +242,18 @@ bool PlanningComponent::Proc(
   if (nullptr != local_view_.planning_command) {
     command_status.set_command_id(local_view_.planning_command->command_id());
   }
+
+  ADCTrajectory::TrajectoryType current_trajectory_type =
+      adc_trajectory_pb.trajectory_type();
   if (adc_trajectory_pb.header().status().error_code() !=
       common::ErrorCode::OK) {
     command_status.set_status(external_command::CommandStatusType::ERROR);
     command_status.set_message(adc_trajectory_pb.header().status().msg());
-  } else if (planning_base_->IsPlanningFinished()) {
+  } else if (planning_base_->IsPlanningFinished(current_trajectory_type)) {
+    AINFO << "Set the external_command: FINISHED";
     command_status.set_status(external_command::CommandStatusType::FINISHED);
   } else {
+    AINFO << "Set the external_command: RUNNING";
     command_status.set_status(external_command::CommandStatusType::RUNNING);
   }
   command_status_writer_->Write(command_status);
@@ -254,6 +283,8 @@ void PlanningComponent::CheckRerouting() {
 
 bool PlanningComponent::CheckInput() {
   ADCTrajectory trajectory_pb;
+
+  SetLocation(&trajectory_pb);
   auto* not_ready = trajectory_pb.mutable_decision()
                         ->mutable_main_decision()
                         ->mutable_not_ready();
@@ -286,6 +317,25 @@ bool PlanningComponent::CheckInput() {
     return false;
   }
   return true;
+}
+
+void PlanningComponent::SetLocation(ADCTrajectory* const ptr_trajectory_pb) {
+  auto p = ptr_trajectory_pb->mutable_location_pose();
+  p->mutable_vehice_location()->set_x(
+      local_view_.localization_estimate->pose().position().x());
+  p->mutable_vehice_location()->set_y(
+      local_view_.localization_estimate->pose().position().y());
+  const Vec2d& adc_position = {
+      local_view_.localization_estimate->pose().position().x(),
+      local_view_.localization_estimate->pose().position().y()};
+  Vec2d left_point, right_point;
+  if (planning_base_->GenerateWidthOfLane(adc_position, left_point,
+                                          right_point)) {
+    p->mutable_left_lane_boundary_point()->set_x(left_point.x());
+    p->mutable_left_lane_boundary_point()->set_y(left_point.y());
+    p->mutable_right_lane_boundary_point()->set_x(right_point.x());
+    p->mutable_right_lane_boundary_point()->set_y(right_point.y());
+  }
 }
 
 }  // namespace planning

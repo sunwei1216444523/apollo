@@ -11,6 +11,8 @@ import TrafficSignal from './trafficSignal';
 import StopSign from './stopSign';
 import SpeedBump from './speedBump';
 import ParkingSpace from './parkingSpace';
+import Area from './area';
+import BarrierGate from './barrierGate';
 
 class Map {
     private scene;
@@ -41,27 +43,36 @@ class Map {
 
     public grid;
 
+    public area;
+
+    public barrierGate;
+
     private option;
 
     private coordinates;
 
-    constructor(scene, text, option, coordinates) {
+    private colors;
+
+    constructor(scene, text, option, coordinates, colors) {
+        this.colors = colors;
         this.scene = scene;
         this.text = text;
         this.option = option;
         this.coordinates = coordinates;
         this.trafficSignal = new TrafficSignal(scene, coordinates);
         this.stopSign = new StopSign(scene, coordinates);
-        this.yieldSignal = new YieldSignal(scene, coordinates);
+        this.yieldSignal = new YieldSignal(scene, coordinates, this.colors);
         this.clearArea = new ClearArea(scene, coordinates);
         this.crosswalk = new Crosswalk(scene, coordinates);
-        this.lane = new Lane(scene, text, option, coordinates);
+        this.lane = new Lane(scene, text, option, coordinates, this.colors);
         this.junction = new Junction(scene, coordinates);
         this.pncJunction = new PncJunction(scene, coordinates);
         this.road = new Road(scene, coordinates);
         this.speedBump = new SpeedBump(scene, coordinates);
         this.parkingSpace = new ParkingSpace(scene, text, option, coordinates);
         this.grid = new Grid(scene);
+        this.area = new Area(scene, coordinates);
+        this.barrierGate = new BarrierGate(scene, coordinates);
     }
 
     public update(mapData, removeOld = false) {
@@ -82,6 +93,8 @@ class Map {
                 yieldSign,
                 speedBump,
                 parkingSpace,
+                area,
+                barrierGate,
             } = this.option.layerOption.Map;
 
             // 如果不是全清除，需要手动去依次清除
@@ -117,6 +130,12 @@ class Map {
 
                 if (!mapData.parkingSpace || !parkingSpace) {
                     this.parkingSpace.dispose();
+                }
+                if (!mapData.adArea || !area) {
+                    this.area.dispose();
+                }
+                if (!mapData.barrierGate || !barrierGate) {
+                    this.barrierGate.dispose();
                 }
             }
 
@@ -176,6 +195,16 @@ class Map {
                         this.parkingSpace.drawParkingSpaces(data);
                     }
                     break;
+                case 'adArea':
+                    if (area) {
+                        this.area.drawAreas(data);
+                    }
+                    break;
+                case 'barrierGate':
+                    if (barrierGate) {
+                        this.barrierGate.drawBarrierGates(data);
+                    }
+                    break;
                 default:
                     break;
             }
@@ -189,8 +218,8 @@ class Map {
                 {
                     size,
                     divisions: size / 5,
-                    colorCenterLine: 0xffffff,
-                    colorGrid: 0xffffff,
+                    colorCenterLine: this.colors.gridColor,
+                    colorGrid: this.colors.gridColor,
                 },
                 position,
             );
@@ -214,6 +243,8 @@ class Map {
         this.road.dispose();
         this.speedBump.dispose();
         this.grid.dispose();
+        this.area.dispose();
+        this.barrierGate.dispose();
     }
 }
 export default Map;

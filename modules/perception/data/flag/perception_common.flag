@@ -1,11 +1,11 @@
 ###########################################################################
 # Flags from sensor_manager
 
---flagfile=/apollo/modules/common/data/global_flagfile.txt
+--flagfile=modules/common/data/global_flagfile.txt
 # config file work root
 # type: string
 # default:
---work_root=/apollo/modules/perception
+--work_root=modules/perception
 
 # SensorManager config file
 # type: string
@@ -15,7 +15,7 @@
 # The intrinsics/extrinsics dir
 # type: string
 # default:
---obs_sensor_intrinsic_path=/apollo/modules/perception/data/params
+--obs_sensor_intrinsic_path=modules/perception/data/params
 
 ###########################################################################
 # Flags from common_flags
@@ -156,3 +156,27 @@
 # --lidarframe_to_obstacles_in=/perception/lidar/detection
 --sensorframe_message_to_obstacles_in=/perception/inner/PrefusedObjects
 
+###########################################################################
+# Flags for hdmap
+
+# hdmap sample step
+# type: int
+# default: 1
+--hdmap_sample_step=1
+
+###################################################
+# Flags for judge front-critical
+--need_judge_front_critical=false
+--x_front=0.0
+--x_back=-0.0
+--y_front=0.0
+--y_back=0.0
+
+###################################################
+# Flags for reserve blind trafficcone
+--need_reserve_blind_cone=false
+--cone_x_front=0.0
+--cone_x_back=0.0
+--cone_y_front=0.0
+--cone_y_back=0.0
+--cone_reserve_time=0.0

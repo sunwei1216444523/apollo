@@ -121,13 +121,14 @@ void MessageProcess::OnHMIStatus(apollo::dreamview::HMIStatus hmi_status) {
   const std::string& current_map = hmi_status.current_map();
   if (map_m_.count(current_map) > 0) {
     map_name_ = map_m_[current_map];
-    const std::string& map_base_folder = "/apollo/modules/map/data/";
+    const std::string& map_base_folder = "modules/map/data/";
     FLAGS_map_dir = map_base_folder + map_name_;
   }
 }
 
 void MessageProcess::OnLocalization(const LocalizationEstimate& le) {
-  if (last_localization_message_timestamp_sec_ == 0.0) {
+  static constexpr double kEpsilon = 1e-12;
+  if (std::abs(last_localization_message_timestamp_sec_) < kEpsilon) {
     last_localization_message_timestamp_sec_ = le.header().timestamp_sec();
   }
   const double time_diff =
@@ -697,9 +698,9 @@ bool MessageProcess::GenerateLocalRouting(
   }
   */
 
-  int adc_road_index;
-  int adc_passage_index;
-  double adc_passage_s;
+  int adc_road_index = 0;
+  int adc_passage_index = 0;
+  double adc_passage_s = 0.0;
   if (!GetADCCurrentRoutingIndex(&adc_road_index, &adc_passage_index,
                                  &adc_passage_s) ||
       adc_road_index < 0 || adc_passage_index < 0 || adc_passage_s < 0) {

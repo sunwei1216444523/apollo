@@ -139,7 +139,6 @@ apollo_cc_library(
         "detector/point_pillars_detection/point_pillars.cc",
         "detector/point_pillars_detection/point_pillars_detection.cc",
         "detector/point_pillars_detection/preprocess_points.cc",
-        "object_builder/object_builder.cc",
     ],
     hdrs = [
         "detector/center_point_detection/center_point_detection.h",
@@ -160,9 +159,9 @@ apollo_cc_library(
         "detector/point_pillars_detection/point_pillars_detection.h",
         "detector/point_pillars_detection/preprocess_points.h",
         "interface/base_lidar_detector.h",
-        "object_builder/object_builder.h",
+        "interface/base_down_sample.h",
     ],
-    copts = PERCEPTION_COPTS + if_profiler(),
+    copts = PERCEPTION_COPTS + if_profiler() + ["-DENABLE_PROFILER=1"],
     deps = [
         ":anchor_mask_cuda",
         ":feature_generator_cuda",
@@ -185,6 +184,7 @@ apollo_cc_library(
         "//modules/perception/lidar_detection/detector/cnn_segmentation/proto:model_param_cc_proto",
         "//modules/perception/lidar_detection/detector/mask_pillars_detection/proto:model_param_cc_proto",
         "//modules/perception/lidar_detection/detector/point_pillars_detection/proto:model_param_cc_proto",
+        "//modules/perception/lidar_detection/down_sample_bank/pcl_down_sample/proto:pcl_down_sample_proto",
         "//modules/perception/lidar_detection/proto:lidar_detection_component_config_cc_proto",
         "@com_google_absl//:absl",
         "@com_google_googletest//:gtest",
@@ -210,7 +210,7 @@ apollo_component(
     name = "liblidar_detection_component.so",
     srcs = ["lidar_detection_component.cc"],
     hdrs = ["lidar_detection_component.h"],
-    copts = PERCEPTION_COPTS + if_profiler(),
+    copts = PERCEPTION_COPTS + if_profiler() + ["-DENABLE_PROFILER=1"],
     linkopts = ["-lleveldb"],
     deps = [
         ":apollo_perception_lidar_detection",
@@ -228,16 +228,6 @@ apollo_cc_test(
         ":apollo_perception_lidar_detection",
         "//modules/perception/common:perception_gflags",
         "//modules/perception/common/algorithm:apollo_perception_common_algorithm",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
-
-apollo_cc_test(
-    name = "spp_cluster_list_test",
-    size = "small",
-    srcs = ["detector/cnn_segmentation/spp_engine/spp_cluster_list_test.cc"],
-    deps = [
-        ":apollo_perception_lidar_detection",
         "@com_google_googletest//:gtest_main",
     ],
 )

@@ -162,6 +162,14 @@ void ActionCommandProcessor::OnCommand(
   std::string module_name = "UNKNOWN";
   if (command->has_header()) {
     module_name = command->header().module_name();
+    double timestamp = apollo::cyber::Clock::NowInSeconds();
+    AINFO << std::setprecision(12) << "timestamp: " << timestamp << " "
+          << "request for " << command->header().timestamp_sec();
+    if (timestamp - command->header().timestamp_sec() > 2.0) {
+      AINFO << "request for " << command->header().module_name()
+            << " has been timeouted";
+      return;
+    }
   }
   status->set_status(CommandStatusType::RUNNING);
   status->set_command_id(command->command_id());
@@ -228,6 +236,20 @@ void ActionCommandProcessor::OnCommand(
       // Use async function to wait for the chassis to be in auto mode.
       cyber::Async(&ActionCommandProcessor::SwitchToAutoMode, this,
                    module_name);
+    } break;
+    // Send "ENTER_MISSION" message to planning.
+    case external_command::ActionCommandType::ENTER_MISSION: {
+      planning::PadMessage planning_message;
+      common::util::FillHeader(module_name, &planning_message);
+      planning_message.set_action(planning::PadMessage::ENTER_MISSION);
+      planning_action_writer_->Write(planning_message);
+    } break;
+    // Send "EXIT_MISSION" message to planning.
+    case external_command::ActionCommandType::EXIT_MISSION: {
+      planning::PadMessage planning_message;
+      common::util::FillHeader(module_name, &planning_message);
+      planning_message.set_action(planning::PadMessage::EXIT_MISSION);
+      planning_action_writer_->Write(planning_message);
     } break;
     // Send "VIN_REQ" message to control.
     default: {

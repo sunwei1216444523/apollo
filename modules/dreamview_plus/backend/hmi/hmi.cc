@@ -48,6 +48,7 @@ HMI::HMI(WebSocketHandler* websocket, MapService* map_service,
       hmi_ws_(hmi_websocket) {
   if (websocket_) {
     RegisterDBMessageHandlers();
+    RegisterFrontendConfMessageHandlers();
     RegisterMessageHandlers();
   }
 }
@@ -221,6 +222,78 @@ void HMI::RegisterDBMessageHandlers() {
       });
 }
 
+void HMI::RegisterFrontendConfMessageHandlers() {
+  websocket_->RegisterMessageHandler(
+      "GetCurrentLayout",
+      [this](const Json& json, WebSocketHandler::Connection* conn) {
+        Json response;
+        response["action"] = "response";
+        std::string request_id;
+        if (!JsonUtil::GetStringByPath(json, "data.requestId", &request_id)) {
+          AERROR
+              << "Failed to add or modify object to DB: requestId not found.";
+          response["data"]["info"]["code"] = -1;
+          response["data"]["info"]["message"] = "Miss requestId";
+          websocket_->SendData(conn, response.dump());
+          return;
+        }
+        response["data"]["requestId"] = request_id;
+        const auto current_mode = hmi_worker_->GetStatus().current_mode();
+        std::string current_layout = hmi_worker_->GetObjectFromDB(current_mode);
+        // If not have current layout, return default layout.
+        if (current_layout.empty()) {
+          AINFO << "There is no current layout, returning the default.";
+          current_layout = hmi_worker_->GetCurrentModeDefaultLayout();
+        }
+        response["data"]["info"]["data"] = current_layout;
+        response["data"]["info"]["code"] = 0;
+        response["data"]["info"]["message"] = "Success";
+        websocket_->SendData(conn, response.dump());
+      });
+  websocket_->RegisterMessageHandler(
+      "GetDefaultLayout",
+      [this](const Json& json, WebSocketHandler::Connection* conn) {
+        Json response;
+        response["action"] = "response";
+        std::string request_id;
+        if (!JsonUtil::GetStringByPath(json, "data.requestId", &request_id)) {
+          AERROR
+              << "Failed to add or modify object to DB: requestId not found.";
+          response["data"]["info"]["code"] = -1;
+          response["data"]["info"]["message"] = "Miss requestId";
+          websocket_->SendData(conn, response.dump());
+          return;
+        }
+        response["data"]["requestId"] = request_id;
+        std::string default_layout = hmi_worker_->GetCurrentModeDefaultLayout();
+        response["data"]["info"]["data"] = default_layout;
+        response["data"]["info"]["code"] = 0;
+        response["data"]["info"]["message"] = "Success";
+        websocket_->SendData(conn, response.dump());
+      });
+  websocket_->RegisterMessageHandler(
+      "GetDvPluginPanelsJson",
+      [this](const Json& json, WebSocketHandler::Connection* conn) {
+        Json response;
+        response["action"] = "response";
+        std::string request_id;
+        if (!JsonUtil::GetStringByPath(json, "data.requestId", &request_id)) {
+          AERROR << "Failed to get dv plugin panels json: requestId not found.";
+          response["data"]["info"]["code"] = -1;
+          response["data"]["info"]["message"] = "Miss requestId";
+          websocket_->SendData(conn, response.dump());
+          return;
+        }
+        response["data"]["requestId"] = request_id;
+        std::string plugin_panels_json_str =
+            hmi_worker_->GetDvPluginPanelsJsonStr();
+        response["data"]["info"]["data"] = plugin_panels_json_str;
+        response["data"]["info"]["code"] = 0;
+        response["data"]["info"]["message"] = "Success";
+        websocket_->SendData(conn, response.dump());
+      });
+}
+
 void HMI::RegisterMessageHandlers() {
   // Send current status and vehicle param to newly joined client.
   // websocket_->RegisterConnectionReadyHandler(
@@ -269,7 +342,6 @@ void HMI::RegisterMessageHandlers() {
         // Extra works for current Dreamview.
         if (hmi_action == HMIAction::CHANGE_VEHICLE) {
           // Reload lidar params for point cloud service.
-          PointCloudUpdater::LoadLidarHeight(FLAGS_lidar_height_yaml);
           SendVehicleParam();
         } else if (hmi_action == HMIAction::CHANGE_MAP) {
           response["data"]["info"]["data"]["isOk"] = is_ok;
@@ -278,7 +350,7 @@ void HMI::RegisterMessageHandlers() {
               is_ok ? "Success" : "Failed to change map";
           websocket_->SendData(conn, response.dump());
         } else if (hmi_action == HMIAction::CHANGE_OPERATION ||
-                  hmi_action == HMIAction::CHANGE_MODE) {
+                   hmi_action == HMIAction::CHANGE_MODE) {
           response["data"]["info"]["data"]["isOk"] = true;
           response["data"]["info"]["code"] = 0;
           response["data"]["info"]["message"] = "Success";
@@ -604,20 +676,30 @@ void HMI::RegisterMessageHandlers() {
           return;
         }
         response["data"]["requestId"] = request_id;
-        bool ret;
+        int ret;
         if (hmi_worker_->GetStatus().current_operation() ==
             HMIModeOperation::Waypoint_Follow) {
           ret = hmi_worker_->SaveRtkDataRecorder(new_name);
         } else {
           ret = hmi_worker_->SaveDataRecorder(new_name);
         }
-        if (ret) {
+        if (ret == 1) {
           response["data"]["info"]["code"] = 0;
           response["data"]["info"]["message"] = "Success";
-        } else {
+        } else if (ret == -1) {
           response["data"]["info"]["code"] = -1;
           response["data"]["info"]["message"] =
               "Failed to save record: a file with the same name exists";
+        } else if (ret == -2) {
+          response["data"]["info"]["code"] = -1;
+          response["data"]["info"]["message"] =
+              "Failed to save the record: the dreamview recording record does "
+              "not exist, please record through dreamview";
+        } else {
+          response["data"]["info"]["code"] = -1;
+          response["data"]["info"]["message"] =
+              "Failed to save record: please try again or check whether your "
+              "record is legal";
         }
         websocket_->SendData(conn, response.dump());
       });
@@ -736,12 +818,6 @@ void HMI::PublishMessage(const std::string& channel_name) {
   hmi_ws_->BroadcastBinaryData(response_str);
 }
 
-bool HMI::UpdateScenarioSetToStatus(const std::string& scenario_set_id,
-                                    const std::string& scenario_set_name) {
-  return hmi_worker_->UpdateScenarioSetToStatus(scenario_set_id,
-                                                scenario_set_name);
-}
-
 bool HMI::UpdateDynamicModelToStatus(const std::string& dynamic_model_name) {
   return hmi_worker_->UpdateDynamicModelToStatus(dynamic_model_name);
 }
@@ -764,20 +840,8 @@ bool HMI::UpdatePointChannelToStatus(const std::string& channel_name) {
   return true;
 }
 
-Json HMI::GetCurrentScenarioExtremPoint() {
-  return hmi_worker_->GetCurrentScenarioExtremPoint();
-}
-
-bool HMI::StartSimObstacle() { return hmi_worker_->StartSimObstacle(); }
-
-bool HMI::StopSimObstacle() { return hmi_worker_->StopSimObstacle(); }
-
-bool HMI::StartScenarioSimulation() {
-  return hmi_worker_->StartScenarioSimulation();
-}
-
-bool HMI::StopScenarioSimulation() {
-  return hmi_worker_->StopScenarioSimulation();
+bool HMI::isProcessRunning(const std::string& process_name) {
+  return hmi_worker_->isProcessRunning(process_name);
 }
 
 }  // namespace dreamview

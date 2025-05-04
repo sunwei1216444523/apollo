@@ -1,7 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Button, message } from '@dreamview/dreamview-ui';
-import SourceEmptyImg from '@dreamview/dreamview-core/src/assets/ic_default_page_no_data.png';
-import IconIcRemoveAllPoints from '@dreamview/dreamview-ui/src/icons/components/IcRemoveAllPoints';
+import { Button, message, useImagePrak, IconPark } from '@dreamview/dreamview-ui';
 import EventEmitter from 'eventemitter3';
 import { useTranslation } from 'react-i18next';
 import { RoutingEditor } from '@dreamview/dreamview-carviz';
@@ -40,6 +38,8 @@ function RoutingEditingFunctionalFavorite(props: RoutingEditingFunctionalFavorit
     const { activeOrigin, destroyFunFavoriteNotFullScreen } = props;
 
     const { cx, classes } = useStyle();
+
+    const SourceEmptyImg = useImagePrak('ic_default_page_no_data');
 
     const EE = useEventEmitter();
 
@@ -170,36 +170,25 @@ function RoutingEditingFunctionalFavorite(props: RoutingEditingFunctionalFavorit
         }
     }, [isMainConnected]);
 
-    // useEffect(() => {
-    //     const unSubScribeCurrentRoute = currentRouteManager.subScribeCurrentRoute((editingRouting) => {
-    //         if (editingRouting?.routeOrigin === RouteOrigin.EDITING_ROUTE) {
-    //             setEditRouting(editingRouting);
-    //         }
-    //     });
-    //     return () => {
-    //         unSubScribeCurrentRoute.unsubscribe();
-    //     };
-    // }, []);
-
     useEffect(() => {
         setActiveRouting(compareRoutingPoint(routingList, currentRouteManager.getCurrentRoute()));
     }, [routingList]);
 
-    useEffect(() => {
-        if (activeOrigin !== CommonRoutingOrigin.FROM_NOT_FULLSCREEN && isMainConnected) {
-            mainApi.getStartPoint().then((res) => {
-                const startPoint = { x: res.x, y: res.y, heading: res?.heading };
-                const endPoint = routingEditor.pathwayMarker.lastPosition;
-                mainApi.checkCycleRouting({ start: startPoint, end: endPoint }).then((cycle) => {
-                    if (!cycle.isCycle) {
-                        routeManager.currentRouteMix.setCurrentRouteMix({
-                            currentRouteLoop: { currentRouteLoopState: false },
-                        });
-                    }
-                });
-            });
-        }
-    }, [isMainConnected, activeOrigin]);
+    // useEffect(() => {
+    //     if (activeOrigin !== CommonRoutingOrigin.FROM_NOT_FULLSCREEN && isMainConnected) {
+    //         mainApi.getStartPoint().then((res) => {
+    //             const startPoint = { x: res.x, y: res.y, heading: res?.heading };
+    //             const endPoint = routingEditor.pathwayMarker.lastPosition;
+    //             mainApi.checkCycleRouting({ start: startPoint, end: endPoint }).then((cycle) => {
+    //                 if (!cycle.isCycle) {
+    //                     routeManager.currentRouteMix.setCurrentRouteMix({
+    //                         currentRouteLoop: { currentRouteLoopState: false },
+    //                     });
+    //                 }
+    //             });
+    //         });
+    //     }
+    // }, [isMainConnected, activeOrigin]);
 
     return (
         <CustomScroll className={classes['favorite-scroll']}>
@@ -255,7 +244,7 @@ function RoutingEditingFunctionalFavorite(props: RoutingEditingFunctionalFavorit
                                         classes['favorite-common-item-op-hover-remove'],
                                     )}
                                 >
-                                    <IconIcRemoveAllPoints />
+                                    <IconPark name='IcRemoveAllPoints' />
                                 </span>
                             </div>
                         </div>

@@ -14,11 +14,12 @@
  * limitations under the License.
  *****************************************************************************/
 
+#include "modules/dreamview/backend/common/handlers/proto_handler.h"
+
 #include <fstream>
 
 #include "cyber/common/file.h"
 #include "cyber/common/log.h"
-#include "modules/dreamview/backend/common/handlers/proto_handler.h"
 
 namespace apollo {
 namespace dreamview {
@@ -32,7 +33,8 @@ bool ProtoHandler::handleGet(CivetServer *server, struct mg_connection *conn) {
   // replace /proto to actual file root path prefix,remove /proto
   // todo(@lijin):adapt to package version,change this to a variable
   std::string file_relative_path = request_uri.substr(6);
-  std::string content;
+  std::string mime_type = mg_get_builtin_mime_type(request_uri.c_str());
+  std::string content, response_header;
 
   {
     std::lock_guard<std::mutex> lock(cache_mutex_);
@@ -48,26 +50,50 @@ bool ProtoHandler::handleGet(CivetServer *server, struct mg_connection *conn) {
       std::lock_guard<std::mutex> lock(cache_mutex_);
       content_cache_[file_relative_path] = content;
     } else {
-      mg_printf(
-          conn,
-          "HTTP/1.1 404 Not Found\r\nContent-Type: text/plain\r\n\r\nFile "
-          "not found");
+      response_header = "HTTP/1.1 404 Not Found\r\nContent-Type: " + mime_type +
+                        "\r\n\r\nFile not found";
+      mg_printf(conn, response_header.c_str());
       return true;
     }
   }
 
-  mg_printf(conn, "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n");
+  response_header = "HTTP/1.1 200 OK\r\nContent-Type: " + mime_type + "\r\n";
+  mg_printf(conn, response_header.c_str());
   mg_printf(conn, "Cache-Control: max-age=86400\r\n\r\n");  // 缓存 24 小时
   // mg_printf(conn, "ETag: \"%s\"\r\n",
   //           GenerateETag(content).c_str());  // 生成并发送ETag
-  mg_printf(conn, "%s", content.c_str());
+  mg_write(conn, content.data(), content.size());
 
   return true;
 }
 
 bool ProtoHandler::FindProtoPath(const std::string file_relative_path,
-                                 std::string* file_abs_path) {
+                                 std::string *file_abs_path) {
   std::string tmp_file_path;
+
+  const char *apollo_env_workroot = std::getenv("APOLLO_ROOT_DIR");
+  if (apollo_env_workroot != nullptr) {
+    tmp_file_path = std::string(apollo_env_workroot) + file_relative_path;
+    if (apollo::cyber::common::PathExists(tmp_file_path)) {
+      ADEBUG << "find proto file in APOLLO_ROOT_DIR: " << tmp_file_path;
+      *file_abs_path = tmp_file_path;
+      return true;
+    }
+  }
+
+  const char *apollo_distribution_home =
+      std::getenv("APOLLO_DISTRIBUTION_HOME");
+  if (apollo_distribution_home != nullptr) {
+    tmp_file_path =
+        std::string(apollo_distribution_home) + "/src" + file_relative_path;
+    if (apollo::cyber::common::PathExists(tmp_file_path)) {
+      ADEBUG << "find proto file in APOLLO_DISTRIBUTION_HOME: "
+             << tmp_file_path;
+      *file_abs_path = tmp_file_path;
+      return true;
+    }
+  }
+
   // source code
   tmp_file_path = "/apollo" + file_relative_path;
   if (apollo::cyber::common::PathExists(tmp_file_path)) {

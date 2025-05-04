@@ -1,9 +1,12 @@
 /* eslint-disable no-return-await */
-import React, { PropsWithChildren, useMemo } from 'react';
+import React, { PropsWithChildren, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useImagePrak } from '@dreamview/dreamview-ui';
 import { IPanelMetaInfo } from '@dreamview/dreamview-core/src/components/panels/type/Panel';
+import { createDymaticPanel } from '../../components/panels/base/PanelFactory';
 import { getPanelTypeByPanelId } from '../../util/layout';
 import { getAllPanels } from '../../components/panels';
+import useWebSocketServices from '../../services/hooks/useWebSocketServices';
 
 export interface IPanelCatalogContext {
     allPanel: IPanelMetaInfo[];
@@ -26,11 +29,47 @@ export function usePanelCatalogContext() {
 
 export function PanelCatalogProvider(props: PropsWithChildren) {
     const { t } = useTranslation('panels');
+    const { mainApi, isMainConnected } = useWebSocketServices();
 
-    const allPanel = useMemo(() => getAllPanels(t), [t]);
+    const imgSrc = useImagePrak([
+        'console_hover_illustrator',
+        'module_delay_hover_illustrator',
+        'vehicle_viz_hover_illustrator',
+        'camera_view_hover_illustrator',
+        'pointcloud_hover_illustrator',
+        'dashboard_hover_illustrator',
+        'image_Charts',
+        'Components',
+        'terminal_Illustrator',
+        'panel_chart',
+    ]);
+
+    const [allPanel, setAllPanel] = useState([]);
+
+    useEffect(() => {
+        if (isMainConnected) {
+            mainApi
+                .getPanelPluginInitData()
+                .then((remotePanels) =>
+                    remotePanels.reduce((result: any, panels: any) => [...result, ...panels.value], []),
+                )
+                .then((remotePanels) => getAllPanels(remotePanels, t, imgSrc))
+                .catch(() => getAllPanels([], t, imgSrc))
+                .then((panels) => {
+                    setAllPanel(panels);
+                });
+        }
+    }, [isMainConnected, mainApi, t, imgSrc]);
 
     const panelUtils = useMemo(() => {
-        const panelComponents = new Map(allPanel.map((panelInfo) => [panelInfo.type, React.lazy(panelInfo.module)]));
+        const panelComponents = new Map( // 新增字段 panelInfo.originType 面板类型 remote | local
+            allPanel.map((panelInfo) => [
+                panelInfo.type,
+                panelInfo.originType === 'local'
+                    ? React.lazy(panelInfo.module)
+                    : createDymaticPanel(React.lazy(panelInfo.module)),
+            ]),
+        );
         const panelToolBar = new Map(
             allPanel
                 .filter((panel) => panel.renderToolbar)
@@ -52,7 +91,7 @@ export function PanelCatalogProvider(props: PropsWithChildren) {
                 },
             },
         };
-    }, []);
+    }, [allPanel]);
 
     const values: IPanelCatalogContext = useMemo(() => {
         const panelCatalog = new Map(allPanel.map((panelInfo) => [panelInfo.type, panelInfo]));

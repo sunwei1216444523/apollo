@@ -1,7 +1,7 @@
 import React from 'react';
 import { useMenuStore } from '@dreamview/dreamview-core/src/store/MenuStore';
 import { CloseMenuAction } from '@dreamview/dreamview-core/src/store/MenuStore/actions';
-import { IconIcClose } from '@dreamview/dreamview-ui';
+import { IconPark } from '@dreamview/dreamview-ui';
 import useStyle from './useStyle';
 
 interface IMenuDrawerTitle {
@@ -12,6 +12,8 @@ interface IMenuDrawerTitle {
 
 function MenuDrawerTitle(props: IMenuDrawerTitle) {
     const { title, border = true, extra } = props;
+
+    const isArr = Array.isArray(extra);
 
     const { classes, cx } = useStyle();
 
@@ -25,10 +27,25 @@ function MenuDrawerTitle(props: IMenuDrawerTitle) {
         <div className={cx(classes['menu-drawer-title'], { [classes['menu-drawer-title-border']]: border })}>
             <span>{title}</span>
             <div className={classes['menu-drawer-title-ic-container']}>
-                <span className={classes['menu-drawer-title-ic']}>{extra}</span>
-                &nbsp;&nbsp;&nbsp;
+                {isArr ? (
+                    <>
+                        {extra.map((item, index) => (
+                            <>
+                                <span key={`${index + 1}`} className={classes['menu-drawer-title-ic']}>
+                                    {item}
+                                </span>
+                                &nbsp;&nbsp;&nbsp;
+                            </>
+                        ))}
+                    </>
+                ) : (
+                    <>
+                        <span className={classes['menu-drawer-title-ic']}>{extra}</span>
+                        &nbsp;&nbsp;&nbsp;
+                    </>
+                )}
                 <span className={classes['menu-drawer-title-ic']} onClick={onClose}>
-                    <IconIcClose />
+                    <IconPark name='IcClose' />
                 </span>
             </div>
         </div>

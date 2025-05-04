@@ -34,20 +34,22 @@ namespace apollo {
 namespace dreamview {
 
 using apollo::localization::LocalizationEstimate;
+using apollo::perception::PerceptionEdgeInfo;
+using apollo::transform::TransformStampeds;
 using Json = nlohmann::json;
 
-float PointCloudUpdater::lidar_height_ = kDefaultLidarHeight;
 boost::shared_mutex PointCloudUpdater::mutex_;
 
 PointCloudUpdater::PointCloudUpdater(WebSocketHandler *websocket)
-    : node_(cyber::CreateNode("point_cloud")),
+    : UpdaterWithChannelsBase({"PointCloud", "PerceptionEdgeInfo"},
+                              {"sensor", "edge"}),
+      node_(cyber::CreateNode("point_cloud")),
       websocket_(websocket) {
   localization_reader_ = node_->CreateReader<LocalizationEstimate>(
       FLAGS_localization_topic,
       [this](const std::shared_ptr<LocalizationEstimate> &msg) {
         UpdateLocalizationTime(msg);
       });
-  LoadLidarHeight(FLAGS_lidar_height_yaml);
 }
 
 PointCloudUpdater::~PointCloudUpdater() { Stop(); }
@@ -58,38 +60,25 @@ PointCloudChannelUpdater* PointCloudUpdater::GetPointCloudChannelUpdater(
   if (channel_updaters_.find(channel_name) == channel_updaters_.end()) {
     channel_updaters_[channel_name] =
         new PointCloudChannelUpdater(channel_name);
-    channel_updaters_[channel_name]->point_cloud_reader_ =
-        node_->CreateReader<drivers::PointCloud>(
-            channel_name, [channel_name, this](
-                              const std::shared_ptr<drivers::PointCloud> &msg) {
-              UpdatePointCloud(msg, channel_name);
-            });
+    if (channel_name == FLAGS_perception_edge_info_topic) {
+      channel_updaters_[channel_name]->perception_edge_reader_ =
+          node_->CreateReader<PerceptionEdgeInfo>(
+              channel_name,
+              [channel_name,
+               this](const std::shared_ptr<PerceptionEdgeInfo> &msg) {
+                UpdatePerceptionEdge(msg, channel_name);
+              });
+    } else {
+      channel_updaters_[channel_name]->point_cloud_reader_ =
+          node_->CreateReader<drivers::PointCloud>(
+              channel_name,
+              [channel_name,
+               this](const std::shared_ptr<drivers::PointCloud> &msg) {
+                UpdatePointCloud(msg, channel_name);
+              });
+    }
   }
   return channel_updaters_[channel_name];
-}
-
-void PointCloudUpdater::LoadLidarHeight(const std::string &file_path) {
-  if (!cyber::common::PathExists(file_path)) {
-    AWARN << "No such file: " << FLAGS_lidar_height_yaml
-          << ". Using default lidar height:" << kDefaultLidarHeight;
-    boost::unique_lock<boost::shared_mutex> writer_lock(mutex_);
-    lidar_height_ = kDefaultLidarHeight;
-    return;
-  }
-
-  YAML::Node config = YAML::LoadFile(file_path);
-  if (config["vehicle"] && config["vehicle"]["parameters"]) {
-    boost::unique_lock<boost::shared_mutex> writer_lock(mutex_);
-    lidar_height_ = config["vehicle"]["parameters"]["height"].as<float>();
-    AINFO << "Lidar height is updated to " << lidar_height_;
-    return;
-  }
-
-  AWARN << "Fail to load the lidar height yaml file: "
-        << FLAGS_lidar_height_yaml
-        << ". Using default lidar height:" << kDefaultLidarHeight;
-  boost::unique_lock<boost::shared_mutex> writer_lock(mutex_);
-  lidar_height_ = kDefaultLidarHeight;
 }
 
 void PointCloudUpdater::StartStream(const double &time_interval_ms,
@@ -138,7 +127,10 @@ void PointCloudUpdater::PublishMessage(const std::string &channel_name) {
   PointCloudChannelUpdater *updater = GetPointCloudChannelUpdater(channel_name);
   std::string to_send;
   // the channel has no data input, clear the sending object.
-  if (!updater->point_cloud_reader_->HasWriter()) {
+  if ((updater->point_cloud_reader_ &&
+       !updater->point_cloud_reader_->HasWriter()) ||
+      (updater->perception_edge_reader_ &&
+       !updater->perception_edge_reader_->HasWriter())) {
     updater->last_point_cloud_time_ = 0.0;
     updater->point_cloud_str_ = "";
     to_send = "";
@@ -168,11 +160,12 @@ void PointCloudUpdater::PublishMessage(const std::string &channel_name) {
 
 void PointCloudUpdater::GetChannelMsg(std::vector<std::string> *channels) {
   enabled_ = true;
-  GetChannelMsgWithFilter(channels, "PointCloud", "sensor");
+  GetChannelMsgWithFilter(channels);
 }
 
 pcl::PointCloud<pcl::PointXYZ>::Ptr PointCloudUpdater::ConvertPCLPointCloud(
-    const std::shared_ptr<drivers::PointCloud> &point_cloud) {
+    const std::shared_ptr<drivers::PointCloud> &point_cloud,
+    const std::string &channel_name) {
   pcl::PointCloud<pcl::PointXYZ>::Ptr pcl_ptr(
       new pcl::PointCloud<pcl::PointXYZ>);
   pcl_ptr->width = point_cloud->width();
@@ -192,7 +185,38 @@ pcl::PointCloud<pcl::PointXYZ>::Ptr PointCloudUpdater::ConvertPCLPointCloud(
     pcl_ptr->points[i].y = point.y();
     pcl_ptr->points[i].z = point.z();
   }
+
+  TransformPointCloud(pcl_ptr, point_cloud->header().frame_id());
+
   return pcl_ptr;
+}
+
+void PointCloudUpdater::UpdatePerceptionEdge(
+    const std::shared_ptr<PerceptionEdgeInfo> &perception_edge,
+    const std::string &channel_name) {
+  PointCloudChannelUpdater *updater = GetPointCloudChannelUpdater(channel_name);
+  if (perception_edge->header().has_timestamp_sec()) {
+    updater->last_point_cloud_time_ = perception_edge->header().timestamp_sec();
+  }
+  if (std::fabs(last_localization_time_ - updater->last_point_cloud_time_) >
+      0.1) {
+    AWARN << "skipping outdated perception edge data";
+    return;
+  }
+  apollo::dreamview::PointCloud point_cloud_pb;
+  point_cloud_pb.set_is_edge(true);
+  for (size_t idx = 0; idx < perception_edge->edge_point_size(); ++idx) {
+    auto pt = perception_edge->edge_point(idx);
+    if (!std::isnan(pt.x()) && !std::isnan(pt.y()) && !std::isnan(pt.z())) {
+      point_cloud_pb.add_num(pt.x());
+      point_cloud_pb.add_num(pt.y());
+      point_cloud_pb.add_num(pt.z());
+    }
+  }
+  {
+    boost::unique_lock<boost::shared_mutex> writer_lock(mutex_);
+    point_cloud_pb.SerializeToString(&updater->point_cloud_str_);
+  }
 }
 
 void PointCloudUpdater::UpdatePointCloud(
@@ -215,13 +239,13 @@ void PointCloudUpdater::UpdatePointCloud(
     if (updater->future_ready_) {
       updater->future_ready_ = false;
       // transform from drivers::PointCloud to pcl::PointCloud
-      pcl_ptr = ConvertPCLPointCloud(point_cloud);
+      pcl_ptr = ConvertPCLPointCloud(point_cloud, channel_name);
       std::future<void> f = cyber::Async(&PointCloudUpdater::FilterPointCloud,
                                          this, pcl_ptr, channel_name);
       updater->async_future_ = std::move(f);
     }
   } else {
-    pcl_ptr = ConvertPCLPointCloud(point_cloud);
+    pcl_ptr = ConvertPCLPointCloud(point_cloud, channel_name);
     this->FilterPointCloud(pcl_ptr, channel_name);
   }
 }
@@ -249,18 +273,13 @@ void PointCloudUpdater::FilterPointCloud(
     pcl_filtered_ptr = pcl_ptr;
   }
 
-  float z_offset;
-  {
-    boost::shared_lock<boost::shared_mutex> reader_lock(mutex_);
-    z_offset = lidar_height_;
-  }
   apollo::dreamview::PointCloud point_cloud_pb;
   for (size_t idx = 0; idx < pcl_filtered_ptr->size(); ++idx) {
     pcl::PointXYZ &pt = pcl_filtered_ptr->points[idx];
     if (!std::isnan(pt.x) && !std::isnan(pt.y) && !std::isnan(pt.z)) {
       point_cloud_pb.add_num(pt.x);
       point_cloud_pb.add_num(pt.y);
-      point_cloud_pb.add_num(pt.z + z_offset);
+      point_cloud_pb.add_num(pt.z);
     }
   }
   {
@@ -273,6 +292,56 @@ void PointCloudUpdater::FilterPointCloud(
 void PointCloudUpdater::UpdateLocalizationTime(
     const std::shared_ptr<LocalizationEstimate> &localization) {
   last_localization_time_ = localization->header().timestamp_sec();
+}
+
+void PointCloudUpdater::TransformPointCloud(
+    pcl::PointCloud<pcl::PointXYZ>::Ptr &point_cloud,
+    const std::string &frame_id) {
+  if (frame_id.empty()) {
+    AERROR << "Failed to get frame id";
+    return;
+  }
+  apollo::transform::Buffer *tf2_buffer = apollo::transform::Buffer::Instance();
+  apollo::transform::TransformStamped stamped_transform;
+  try {
+    stamped_transform = tf2_buffer->lookupTransform("localization", frame_id,
+                                                    apollo::cyber::Time(0));
+  } catch (tf2::TransformException &ex) {
+    AERROR << ex.what();
+    AERROR << "Failed to get matrix of frame id: " << frame_id;
+    return;
+  }
+
+  auto &matrix = stamped_transform.transform();
+
+  // Define a translation vector
+  Eigen::Vector3f translation(
+      matrix.translation().x(), matrix.translation().y(),
+      matrix.translation().z());  // Replace with your actual values
+
+  // Define a quaternion for rotation
+  Eigen::Quaternionf rotation(
+      matrix.rotation().qw(), matrix.rotation().qx(), matrix.rotation().qy(),
+      matrix.rotation().qz());  // Replace with your actual values (w, x, y, z)
+  rotation.normalize();  // Ensure the quaternion is a valid unit quaternion
+
+  // Combine into a transformation matrix
+  Eigen::Affine3f transform = Eigen::Affine3f::Identity();
+  transform.translation() << translation;
+  transform.rotate(rotation);
+
+  // Transform the point cloud
+  pcl::transformPointCloud(*point_cloud, *point_cloud, transform);
+  // Define the rotation matrix for 90 degree counter-clockwise rotation in
+  // the xy-plane
+  Eigen::Matrix4f counter_transform = Eigen::Matrix4f::Identity();
+  counter_transform(0, 0) = 0;
+  counter_transform(0, 1) = 1;
+  counter_transform(1, 0) = -1;
+  counter_transform(1, 1) = 0;
+
+  // Perform the transformation
+  pcl::transformPointCloud(*point_cloud, *point_cloud, counter_transform);
 }
 
 }  // namespace dreamview

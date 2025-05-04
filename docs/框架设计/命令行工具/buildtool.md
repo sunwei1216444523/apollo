@@ -57,6 +57,7 @@ action 涵盖了 buildtool 的所有功能，如 build 负责编译， install �
 - create - 按模板创建包
 - release - 将编译产物打包成可分发的格式
 - deploy - 部署由 `release` 打包而成所包
+- map - 查看和下载公开的地图
 
 ### login
 
@@ -287,6 +288,11 @@ buildtool install planning
 ```
 
 上述操作 buildtool 将下载 planning 模块，将 planning 模块的源码复制到工作空间。
+
+注：buildtool install planning只会下载planning_component模块源码，如果您希望将planning相关所有模块全部下载，可通过使用通配符"*"
+```shell
+buildtool install planning*
+```
 
 ```shell
 buildtool install --legacy planning
@@ -657,3 +663,29 @@ optional arguments:
 ```shell
 buildtool deploy -f release.tar.gz
 ```
+
+### map
+
+这个命令用于查看和下载公开的地图
+
+#### 用法
+
+##### 查看本地已有的地图
+
+```shell
+buildtool map list
+```
+
+##### 查看本地以及远端公开的地图
+
+```shell
+buildtool map list -r
+```
+
+##### 下载地图
+
+```shell
+buildtool map get <map_name>
+```
+
+> 注：`<map_name>` 为地图的名或者序号（名称和序号可通过 `buildtool map list -r` 查看）

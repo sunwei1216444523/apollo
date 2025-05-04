@@ -16,7 +16,7 @@
 
 #include "modules/common/configs/config_gflags.h"
 
-DEFINE_string(map_dir, "/apollo/modules/map/data/sunnyvale_loop",
+DEFINE_string(map_dir, "modules/map/data/sunnyvale_loop",
               "Directory which contains a group of related maps.");
 DEFINE_int32(local_utm_zone_id, 10, "UTM zone id.");
 
@@ -34,18 +34,21 @@ DEFINE_string(end_way_point_filename, "default_end_way_point.txt",
 DEFINE_string(default_routing_filename, "default_cycle_routing.txt",
               "Default cycle routing of the map, will be sent in Task to Task "
               "Manager Module.");
+DEFINE_string(current_start_point_filename, "current_start_point.txt",
+              "The current starting point of the vehicle. Setting the starting "
+              "point in route editing will be reset.");
 DEFINE_string(park_go_routing_filename, "park_go_routing.txt",
               "Park go routing of the map, support for dreamview contest.");
 DEFINE_string(speed_control_filename, "speed_control.pb.txt",
               "The speed control region in a map.");
 
 DEFINE_string(vehicle_config_path,
-              "/apollo/modules/common/data/vehicle_param.pb.txt",
+              "modules/common/data/vehicle_param.pb.txt",
               "the file path of vehicle config file");
 
 DEFINE_string(
     vehicle_model_config_filename,
-    "/apollo/modules/common/vehicle_model/conf/vehicle_model_config.pb.txt",
+    "modules/common/vehicle_model/conf/vehicle_model_config.pb.txt",
     "the file path of vehicle model config file");
 
 DEFINE_bool(use_cyber_time, false,

@@ -37,7 +37,9 @@ apollo_cc_library(
     hdrs = ["dependency_injector.h"],
     deps = [
         "//modules/common/vehicle_state:vehicle_state_provider",
+        "//modules/common_msgs/control_msgs:control_interactive_msg_proto",
         "//modules/common_msgs/external_command_msgs:command_status_proto",
+        "//modules/control/control_component/proto:control_debug_proto",
     ],
 )
 
@@ -66,6 +68,7 @@ apollo_cc_library(
     copts = CONTROL_COPTS,
     deps = [
         "//cyber",
+        "//modules/control/control_component/common:control_gflags",
     ],
 )
 

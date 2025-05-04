@@ -29,9 +29,6 @@ preprocess {
   enable_downsample_beams: false
   downsample_beams_factor: 1
   enable_downsample_pointcloud: true
-  downsample_voxel_size_x: 0.09
-  downsample_voxel_size_y: 0.09
-  downsample_voxel_size_z: 0.09
   enable_fuse_frames: false
   num_fuse_frames: 5
   fuse_time_interval: 0.5
@@ -48,6 +45,11 @@ postprocess {
   top_enlarge_height: 0.25
   width_enlarge_value: 0
   length_enlarge_value: 0
+  cone_score_threshold: 0.50
+  ped_score_threshold: 0.25
+  cyc_score_threshold: 0.25
+  small_mot_score_threshold: 0.25
+  big_mot_score_threshold: 0.25
 }
 
 paddle_settings {
@@ -67,3 +69,11 @@ min_points_threshold: 3
 diff_class_nms: true
 diff_class_iou: 0.25
 nms_strategy: false
+filter_by_semantic_type: false
+filter_ground_points: false
+
+plugins {
+    name: "PclDownSample"
+    config_path: "perception/lidar_detection/data/plugins"
+    config_file: "pcl_down_sample.pb.txt"
+}

@@ -23,6 +23,7 @@
 #include "absl/strings/str_split.h"
 
 #include "cyber/common/file.h"
+#include "cyber/common/environment.h"
 #include "modules/common/util/map_util.h"
 #include "modules/dreamview/backend/common/dreamview_gflags.h"
 
@@ -61,7 +62,7 @@ Map<std::string, std::string> ListFilesAsDict(std::string_view dir,
 }
 
 // List subdirs and return a dict of {subdir_title: subdir_path}.
-Map<std::string, std::string> ListDirAsDict(const std::string &dir) {
+Map<std::string, std::string> HMIUtil::ListDirAsDict(const std::string &dir) {
   Map<std::string, std::string> result;
   const auto subdirs = cyber::common::ListSubPaths(dir);
   for (const auto &subdir : subdirs) {
@@ -92,7 +93,13 @@ HMIConfig HMIUtil::LoadConfig(std::string config_path) {
       << "No modes config loaded";
 
   *config.mutable_maps() = ListDirAsDict(FLAGS_maps_data_path);
-  *config.mutable_vehicles() = ListDirAsDict(FLAGS_vehicles_config_path);
+  std::string vehicles_config_path;
+  if (apollo::cyber::common::GetFilePathWithEnv(FLAGS_vehicles_config_path,
+                                                "APOLLO_ENV_WORKROOT",
+                                                &vehicles_config_path)) {
+    AINFO << "Get vehicles config path success: " << vehicles_config_path;
+    *config.mutable_vehicles() = ListDirAsDict(vehicles_config_path);
+  }
   AINFO << "Loaded HMI config: " << config.DebugString();
   return config;
 }

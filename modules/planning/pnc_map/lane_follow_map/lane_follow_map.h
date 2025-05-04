@@ -28,6 +28,7 @@
 
 #include "modules/common/vehicle_state/proto/vehicle_state.pb.h"
 #include "modules/common_msgs/routing_msgs/routing.pb.h"
+
 #include "cyber/plugin_manager/plugin_manager.h"
 #include "modules/map/hdmap/hdmap.h"
 #include "modules/map/pnc_map/path.h"
@@ -71,6 +72,13 @@ class LaneFollowMap : public PncMapBase {
    */
   hdmap::LaneInfoConstPtr GetLaneById(const hdmap::Id &id) const override;
 
+  bool GetNearestPointFromRouting(
+      const common::VehicleState &state,
+      apollo::hdmap::LaneWaypoint *waypoint) const override;
+
+  double GetDistanceToDestination() const override;
+  apollo::hdmap::LaneWaypoint GetAdcWaypoint() const override;
+
  private:
   /**
    * @brief Check if the command can be processed by this map.
@@ -97,9 +105,6 @@ class LaneFollowMap : public PncMapBase {
    *   an index in range [0, route_indices.size());
    */
   int GetWaypointIndex(const apollo::hdmap::LaneWaypoint &waypoint) const;
-
-  bool GetNearestPointFromRouting(const common::VehicleState &point,
-                                  apollo::hdmap::LaneWaypoint *waypoint) const;
 
   bool PassageToSegments(routing::Passage passage,
                          apollo::hdmap::RouteSegments *segments) const;
@@ -166,6 +171,8 @@ class LaneFollowMap : public PncMapBase {
       int start, const apollo::hdmap::LaneWaypoint &waypoint) const;
 
   void UpdateRoutingRange(int adc_index);
+  void UpdateRouteSegmentsLaneIds(
+      const std::list<hdmap::RouteSegments> *route_segments);
 
  private:
   struct RouteIndex {
@@ -178,6 +185,7 @@ class LaneFollowMap : public PncMapBase {
   // routing ids in range
   std::unordered_set<std::string> range_lane_ids_;
   std::unordered_set<std::string> all_lane_ids_;
+  std::unordered_set<std::string> route_segments_lane_ids_;
 
   /**
    * The routing request waypoints
@@ -209,11 +217,6 @@ class LaneFollowMap : public PncMapBase {
    * A three element index: {road_index, passage_index, lane_index}
    */
   int adc_route_index_ = -1;
-  /**
-   * The waypoint of the autonomous driving car
-   */
-  apollo::hdmap::LaneWaypoint adc_waypoint_;
-
   /**
    * @brief Indicates whether the adc should start consider destination.
    * In a looped routing, the vehicle may need to pass by the destination

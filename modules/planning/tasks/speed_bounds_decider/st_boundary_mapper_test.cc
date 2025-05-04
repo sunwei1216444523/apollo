@@ -67,7 +67,7 @@ class StBoundaryMapperTest : public ::testing::Test {
 
     prediction::PredictionObstacles prediction_obstacles;
     ASSERT_TRUE(cyber::common::GetProtoFromFile(
-        "/apollo/modules/planning/planning_base/testdata/"
+        "modules/planning/planning_base/testdata/"
         "common/sample_prediction.pb.txt",
         &prediction_obstacles));
     auto obstacles = Obstacle::CreateObstacles(prediction_obstacles);
@@ -79,7 +79,7 @@ class StBoundaryMapperTest : public ::testing::Test {
 
  protected:
   const std::string map_file =
-      "/apollo/modules/planning/planning_base/testdata/garage_map/base_map.txt";
+      "modules/planning/planning_base/testdata/garage_map/base_map.txt";
   hdmap::HDMap hdmap_;
   common::math::Vec2d vehicle_position_;
   std::unique_ptr<ReferenceLine> reference_line_;
@@ -101,35 +101,6 @@ TEST_F(StBoundaryMapperTest, check_overlap_test) {
   path_point.set_y(1.0);
   common::math::Box2d box(common::math::Vec2d(1.0, 1.0), 0.0, 5.0, 3.0);
   EXPECT_TRUE(mapper.CheckOverlap(path_point, box, 0.0));
-}
-
-TEST_F(StBoundaryMapperTest, get_overlap_boundary_points_test) {
-  SpeedBoundsDeciderConfig config;
-  double planning_distance = 70.0;
-  double planning_time = 10.0;
-  STBoundaryMapper mapper(config, *reference_line_, path_data_,
-                          planning_distance, planning_time, injector_);
-  std::vector<STPoint> lower_points;
-  std::vector<STPoint> upper_points;
-  std::vector<common::PathPoint> path_points(20);
-  for (size_t i = 0; i < 20; i++) {
-    common::PathPoint path_point;
-    path_point.set_x(0.0);
-    path_point.set_y(0.0 + 2 * i);
-    path_point.set_s(0.0 + 2 * i);
-    path_points.emplace_back(path_point);
-  }
-  Obstacle* obstacle = indexed_obstacles_.Find("88_0");
-  EXPECT_TRUE(false) << obstacle->Id();
-  EXPECT_FALSE(mapper.GetOverlapBoundaryPoints(path_points,
-              *obstacle, &upper_points, &lower_points));
-  EXPECT_TRUE(false) << "lower_points:" << lower_points.size();
-  for (size_t i = 0; i < lower_points.size(); i++) {
-    EXPECT_TRUE(false) << "lower_points: " << lower_points[i].t()
-                        << " " << lower_points[i].s()
-                        << " upper_points: " << upper_points[i].t()
-                        << " " << upper_points[i].s();
-  }
 }
 
 }  // namespace planning

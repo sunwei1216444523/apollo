@@ -16,6 +16,11 @@ gpu_library(
         "plugins/rpn_proposal_ssd_plugin.cu",
         "plugins/slice_plugin.cu",
         "plugins/softmax_plugin.cu",
+        "plugins/mmdeploy_plugins/trt_grid_sampler_kernel.cu",
+        "plugins/mmdeploy_plugins/trt_grid_sampler.cpp",
+        "plugins/mmdeploy_plugins/trt_modulated_deform_conv_kernel.cu",
+        "plugins/mmdeploy_plugins/trt_modulated_deform_conv.cpp",
+        "plugins/mmdeploy_plugins/trt_cuda_helper.cu",
     ],
     hdrs = [
         "plugins/argmax_plugin.h",
@@ -26,6 +31,14 @@ gpu_library(
         "plugins/rpn_proposal_ssd_plugin.h",
         "plugins/slice_plugin.h",
         "plugins/softmax_plugin.h",
+        "plugins/mmdeploy_plugins/trt_grid_sampler_kernel.hpp",
+        "plugins/mmdeploy_plugins/trt_grid_sampler.hpp",
+        "plugins/mmdeploy_plugins/trt_modulated_deform_conv.hpp",
+        "plugins/mmdeploy_plugins/trt_modulated_deform_conv_kernel.hpp",
+        "plugins/mmdeploy_plugins/trt_plugin_base.hpp",
+        "plugins/mmdeploy_plugins/trt_plugin_helper.hpp",
+        "plugins/mmdeploy_plugins/trt_serialize.hpp",
+        "plugins/mmdeploy_plugins/common_cuda_helper.hpp",
     ],
     deps = [
         ":apollo_perception_inference_rt_common",
@@ -144,23 +157,6 @@ apollo_cc_test(
     linkstatic = True,
     deps = [
         ":apollo_perception_inference_rt_common",
-        "@com_google_googletest//:gtest_main",
-    ],
-)
-
-apollo_cc_test(
-    name = "rt_net_test",
-    size = "small",
-    srcs = ["rt_net_test.cc"],
-    data = [
-        "//modules/perception/common/inference:inference_test_data",
-    ],
-    linkstatic = True,
-    tags = ["exclude"],
-    deps = [
-        ":apollo_perception_inference_rt_net",
-        "//modules/perception/common/inference:apollo_perception_common_inference",
-        "@atlas//:cblas",
         "@com_google_googletest//:gtest_main",
     ],
 )

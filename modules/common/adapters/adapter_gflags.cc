@@ -27,6 +27,11 @@ DEFINE_string(audio_detection_topic, "/apollo/audio_detection",
 DEFINE_string(chassis_topic, "/apollo/canbus/chassis", "chassis topic name");
 DEFINE_string(chassis_detail_topic, "/apollo/canbus/chassis_detail",
               "chassis detail topic name");
+DEFINE_string(chassis_detail_sender_topic,
+              "/apollo/canbus/chassis_detail_sender",
+              "chassis detail sender_topic name");
+DEFINE_string(chassis_command_topic, "/apollo/chassis_control",
+              "chassis command topic name");
 DEFINE_string(localization_topic, "/apollo/localization/pose",
               "localization topic name");
 DEFINE_string(planning_learning_data_topic, "/apollo/planning/learning_data",
@@ -42,8 +47,10 @@ DEFINE_string(pad_topic, "/apollo/control/pad",
               "control pad message topic name");
 DEFINE_string(control_command_topic, "/apollo/control",
               "control command topic name");
-DEFINE_string(chassis_command_topic, "/apollo/chassis_control",
-              "chassis command topic name");
+DEFINE_string(control_debug_info_topic, "/apollo/control/debug",
+              "control debug info topic name");
+DEFINE_string(control_interative_topic, "/apollo/control/interactive",
+              "control interactive info to others topic name");
 DEFINE_string(control_preprocessor_topic, "/apollo/control/preprocessor",
               "control preprocessor topic name");
 DEFINE_string(control_local_view_topic, "/apollo/control/localview",
@@ -258,7 +265,7 @@ DEFINE_string(rtcm_data_topic, "/apollo/sensor/gnss/rtcm_data",
               "gnss rtcm data topic name");
 DEFINE_string(tf_topic, "/tf", "Transform topic.");
 DEFINE_string(tf_static_topic, "/tf_static", "Transform static topic.");
-DEFINE_string(recorder_status_topic, "/apollo/data/recorder/status",
+DEFINE_string(recorder_status_topic, "data/recorder/status",
               "Recorder status topic.");
 DEFINE_string(latency_recording_topic, "/apollo/common/latency_records",
               "Latency recording topic.");

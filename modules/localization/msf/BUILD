@@ -162,7 +162,7 @@ apollo_cc_library(
         "@com_google_absl//:absl",
         "@com_google_googletest//:gtest_main",
         "@eigen",
-        "@fastrtps",
+        "@fastdds",
         "@local_config_pcl//:pcl",
         "@localization_msf",
         "@opencv//:highgui",
@@ -226,7 +226,7 @@ apollo_cc_test(
     deps = [
         "//cyber",
         "//modules/common/util:common_util",
-        "//modules/localization/msf:msf_localization_component_lib",
+        "//modules/localization/msf:DO_NOT_IMPORT_msf_localization_component",
         "@com_google_googletest//:gtest_main",
     ],
 )

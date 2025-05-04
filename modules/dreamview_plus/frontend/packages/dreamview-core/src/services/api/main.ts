@@ -1,6 +1,7 @@
 import Logger from '@dreamview/log';
+import { mergeMap, throwError, of, catchError } from 'rxjs';
 import { apollo } from '@dreamview/dreamview';
-import { webSocketManager } from '../WebSocketManager';
+import { webSocketManager, Metadata, SocketNameEnum } from '../WebSocketManager';
 import { ReqDataType, RequestDataType } from '../models/request-message.model';
 import {
     HMIActions,
@@ -8,6 +9,9 @@ import {
     MainApiTypes,
     DefaultRoutings,
     StartScenario,
+    CheckMapCollectInfo,
+    CreateMapFileInfo,
+    ExportMapFileInfo,
     SaveDefaultRoutingInfo,
     GetStartPointInfo,
     SetStartPointInfo,
@@ -31,7 +35,6 @@ import {
     IGetTuplesObjectStoreParams,
     RoutePathInfo,
 } from './types';
-import { Metadata, SocketNameEnum } from '../WebSocketManager/type';
 
 type IMapElementIds = apollo.dreamview.IMapElementIds;
 type IMap = apollo.hdmap.IMap;
@@ -105,6 +108,29 @@ export class MainApi {
                 );
                 return Promise.reject(err);
             });
+    }
+
+    requestStream<Req, Res>(req: ReqDataType<Req>) {
+        return webSocketManager
+            .requestStream<Req, Res>(this.generateRequest(req), SocketNameEnum.MAIN, req.data.requestId)
+            .pipe(
+                mergeMap((res) => {
+                    if (res.data.info.code !== 0) {
+                        logger.error(
+                            `Received error message from PluginRequest name: ${
+                                req.data.name
+                            }, message: ${JSON.stringify(res.data.info, null, 0)}`,
+                        );
+                        return throwError(new Error(res.data.info.message));
+                    }
+                    return of(res.data.info.data);
+                }),
+                catchError((error) => {
+                    // Handle the error here
+                    console.error(error);
+                    return throwError(error);
+                }),
+            );
     }
 
     startPlayRecorder() {
@@ -217,6 +243,16 @@ export class MainApi {
             },
             type: MainApiTypes.GetInitData,
         });
+    }
+
+    getPanelPluginInitData() {
+        return this.request<any, any>({
+            data: {
+                name: '',
+                info: {},
+            },
+            type: 'GetDvPluginPanelsJson',
+        }).then((r) => JSON.parse(r || '[]'));
     }
 
     loadDynamic() {
@@ -434,6 +470,18 @@ export class MainApi {
                 info: {
                     action: HMIActions.ChangeDynamic,
                     value: dynamicName,
+                },
+            },
+            type: MainApiTypes.HMIAction,
+        });
+    }
+
+    loadMaps() {
+        return this.requestWithoutRes<HMIDataPayload>({
+            data: {
+                name: '',
+                info: {
+                    action: HMIActions.LoadMaps,
                 },
             },
             type: MainApiTypes.HMIAction,
@@ -796,7 +844,45 @@ export class MainApi {
         });
     }
 
-    putObjectStore<T>(prop: { type: OBJECT_STORE_TYPE; panelId: string; value: T }) {
+    /**
+     * @description
+     * 将对象存储到本地数据库中。
+     * 如果对象已经存在，则会覆盖原有的对象。
+     *
+     * @param {object} prop - 包含两个属性的对象：
+     * - `type` {string} - 对象类型，用于区分不同类型的对象；
+     * - `value` {any} - 需要存储的对象值。
+     *
+     * @returns {Promise<T>} - Promise 对象，resolve 回调函数参数为传入的 `value`。
+     *
+     * @throws {Error} - 当 `type` 或 `value` 未提供时抛出错误。
+     */
+    putObjectStore<T>(prop: { type: OBJECT_STORE_TYPE; value: T }) {
+        return this.request<IPutObjectStoreParams, T>({
+            data: {
+                name: '',
+                info: {
+                    key: prop.type,
+                    value: JSON.stringify(prop.value),
+                },
+            },
+            type: MainApiTypes.PutObjectStore,
+        });
+    }
+
+    /**
+     * @description
+     * 将图表对象存储到数据库中，并返回一个 Promise。
+     * 如果传入的 `prop` 参数中的 `type` 和 `panelId` 属性都不为空，则会在请求中携带这些信息。
+     *
+     * @param prop {object} 包含以下属性的对象：
+     * - type {string} 对象存储类型，可选值为 'chart'、'dashboard'、'workbench'。默认值为 'chart'。
+     * - panelId {string} 面板 ID，可选值为字符串。默认值为 ''。
+     * - value {T} 需要存储的值，类型为 T。
+     *
+     * @returns {Promise<T>} 返回一个 Promise，resolve 时会返回传入的 `prop.value`，reject 时会返回错误信息。
+     */
+    putChartObjectStore<T>(prop: { type: OBJECT_STORE_TYPE; panelId: string; value: T }) {
         return this.request<IPutObjectStoreParams, T>({
             data: {
                 name: '',
@@ -821,7 +907,19 @@ export class MainApi {
         });
     }
 
-    getObjectStore<T>(prop: { type: OBJECT_STORE_TYPE; panelId: string }) {
+    /**
+     * @description
+     * 获取图表对象存储，返回 Promise，resolve 值为指定类型的数组或空数组。
+     *
+     * @param prop {object} - 包含以下属性：
+     * - type {string} - 对象存储类型，可选值为 'chart'、'filter'、'linkage'。
+     * - panelId {string} - 面板 ID。
+     *
+     * @returns {Promise<T>} - Promise，resolve 值为指定类型的数组或空数组。
+     *
+     * @throws {Error} - 如果请求失败，则 reject 一个 Error 对象。
+     */
+    getChartObjectStore<T>(prop: { type: OBJECT_STORE_TYPE; panelId: string }) {
         return this.request<IGetObjectStoreParams, string>({
             data: {
                 name: '',
@@ -831,6 +929,56 @@ export class MainApi {
             },
             type: MainApiTypes.GetObjectStore,
         }).then((r) => JSON.parse(r || '[]') as T);
+    }
+
+    /**
+     * @description
+     * 获取对象存储，返回 Promise<T>。其中 T 为指定类型的对象。
+     *
+     * @param {object} prop - 包含 type 属性的对象，表示对象存储的类型。
+     * @param {string} prop.type - 必需，字符串类型，表示对象存储的类型。
+     *
+     * @returns {Promise<T>} - Promise 对象，resolve 时返回 T 类型的对象，reject 时抛出错误信息。
+     */
+    getObjectStore<T>(prop: { type: OBJECT_STORE_TYPE }) {
+        return this.request<IGetObjectStoreParams, string>({
+            data: {
+                name: '',
+                info: {
+                    key: prop.type,
+                },
+            },
+            type: MainApiTypes.GetObjectStore,
+        }).then((r) => JSON.parse(r || '{}') as T);
+    }
+
+    /**
+     * 获取当前布局信息
+     *
+     * @returns {Promise<any>} Promise对象，resolve返回一个JSON对象，reject返回错误信息
+     */
+    getCurrentLayout() {
+        return this.request<any, any>({
+            data: {
+                name: '',
+                info: {},
+            },
+            type: MainApiTypes.GetCurrentLayout,
+        }).then((r) => JSON.parse(r || '{}'));
+    }
+
+    /**
+     * @description 获取默认布局，返回一个 Promise，resolve 值为一个对象，包含 name、info 两个属性
+     * @returns {Promise<Object>} resolve 的对象包含 name、info 两个属性，name 是字符串类型，info 是任意类型的对象
+     */
+    getDefaultLayout() {
+        return this.request<any, any>({
+            data: {
+                name: '',
+                info: {},
+            },
+            type: MainApiTypes.GetDefaultLayout,
+        }).then((r) => JSON.parse(r || '{}'));
     }
 
     getTuplesObjectStore<T>(prop: { type: OBJECT_STORE_TYPE }) {
@@ -877,6 +1025,71 @@ export class MainApi {
                 info: '',
             },
             type: MainApiTypes.RequestRoutePath,
+        });
+    }
+
+    checkMapCollect() {
+        return this.request<'', CheckMapCollectInfo>({
+            data: {
+                name: '',
+                info: '',
+            },
+            type: MainApiTypes.CheckMapCollectStatus,
+        });
+    }
+
+    startMapCollect() {
+        return this.request<'', null>({
+            data: {
+                name: '',
+                info: '',
+            },
+            type: MainApiTypes.StartRecordMapData,
+        });
+    }
+
+    endMapCollect() {
+        return this.request<'', null>({
+            data: {
+                name: '',
+                info: '',
+            },
+            type: MainApiTypes.StopRecordMapData,
+        });
+    }
+
+    createMapFile(requestId: string) {
+        return this.requestStream<'', CreateMapFileInfo>({
+            data: {
+                name: '',
+                info: '',
+                requestId,
+            },
+            type: MainApiTypes.StartMapCreator,
+        });
+    }
+
+    breakMapfile(requestId: string) {
+        return this.request<{ requestId: string }, null>({
+            data: {
+                name: '',
+                info: {
+                    requestId,
+                },
+            },
+            type: MainApiTypes.BreakMapCreator,
+        });
+    }
+
+    exportMapFile(info: { source_path: string }) {
+        return this.request<{ source_path: string }, ExportMapFileInfo>({
+            data: {
+                name: '',
+                info: {
+                    source_path: info.source_path,
+                },
+            },
+            type: MainApiTypes.ExportMapFile,
         });
     }
 }

@@ -27,9 +27,9 @@
 
 #include "cyber/task/task.h"
 #include "modules/planning/planning_base/common/planning_context.h"
-#include "modules/planning/planning_base/gflags/planning_gflags.h"
 #include "modules/planning/planning_base/common/trajectory/publishable_trajectory.h"
 #include "modules/planning/planning_base/common/trajectory_stitcher.h"
+#include "modules/planning/planning_base/gflags/planning_gflags.h"
 
 namespace apollo {
 namespace planning {
@@ -72,6 +72,7 @@ void OpenSpaceTrajectoryProvider::Stop() {
     trajectory_error_.store(false);
     trajectory_skipped_.store(false);
     optimizer_thread_counter = 0;
+    last_trajctory_point.Clear();
   }
 }
 
@@ -87,6 +88,7 @@ void OpenSpaceTrajectoryProvider::Restart() {
     trajectory_error_.store(false);
     trajectory_skipped_.store(false);
     optimizer_thread_counter = 0;
+    is_planned_ = false;
   }
 }
 
@@ -104,6 +106,14 @@ Status OpenSpaceTrajectoryProvider::Process() {
     GenerateStopTrajectory(trajectory_data);
     return Status::OK();
   }
+
+  // when in zone cover stage, should change end pose
+  if (FLAGS_change_end_pose) {
+    AINFO << "Restart OpenSpaceTrajectoryProvider!";
+    FLAGS_calculate_next_trajectory = true;
+    Restart();
+  }
+
   // Start thread when getting in Process() for the first time
   if (config_.enable_open_space_planner_thread() && !thread_init_flag_) {
     task_future_ = cyber::Async(
@@ -129,6 +139,17 @@ Status OpenSpaceTrajectoryProvider::Process() {
         1.0 / static_cast<double>(FLAGS_planning_loop_rate);
     stitching_trajectory = TrajectoryStitcher::ComputeReinitStitchingTrajectory(
         planning_cycle_time, vehicle_state);
+    if (FLAGS_calculate_next_trajectory &&
+        last_trajctory_point.has_path_point() && !is_stop_due_to_fallback) {
+      last_trajctory_point.mutable_path_point()->set_s(0.0);
+      last_trajctory_point.set_v(0.1);
+      last_trajctory_point.set_relative_time(0.1);
+      stitching_trajectory =
+          std::vector<TrajectoryPoint>(1, last_trajctory_point);
+    }
+    for (auto& trajectorypoint : stitching_trajectory) {
+      AINFO << "stitching_trajectory: " << trajectorypoint.DebugString();
+    }
     need_replan = true;
     injector_->planning_context()
         ->mutable_planning_status()
@@ -153,9 +174,9 @@ Status OpenSpaceTrajectoryProvider::Process() {
       if (open_space_info.target_parking_spot_id() != "") {
         double angle = open_space_info.open_space_end_pose()[2];
         temp_target[0] = straight_trajectory_length_ * cos(angle) +
-                            open_space_info.open_space_end_pose()[0];
+                         open_space_info.open_space_end_pose()[0];
         temp_target[1] = straight_trajectory_length_ * sin(angle) +
-                            open_space_info.open_space_end_pose()[1];
+                         open_space_info.open_space_end_pose()[1];
       }
       std::lock_guard<std::mutex> lock(open_space_mutex_);
       thread_data_.stitching_trajectory = stitching_trajectory;
@@ -180,7 +201,7 @@ Status OpenSpaceTrajectoryProvider::Process() {
             vehicle_state, open_space_info.open_space_end_pose(),
             open_space_info.origin_heading(), open_space_info.origin_point())) {
       GenerateStopTrajectory(trajectory_data);
-      is_generation_thread_stop_.store(true);
+      // is_generation_thread_stop_.store(true);
       AINFO << "Vehicle is near to destination";
       return Status(ErrorCode::OK, "Vehicle is near to destination");
     }
@@ -234,7 +255,14 @@ Status OpenSpaceTrajectoryProvider::Process() {
                     "open_space_trajectory_provider");
     } else {
       AINFO << "Stop due to computation not finished";
-      GenerateStopTrajectory(trajectory_data);
+      if (previous_frame && !previous_frame->open_space_info()
+                                 .stitched_trajectory_result()
+                                 .empty()) {
+        *(trajectory_data) =
+            previous_frame->open_space_info().stitched_trajectory_result();
+      } else {
+        GenerateStopTrajectory(trajectory_data);
+      }
       return Status(ErrorCode::OK, "Stop due to computation not finished");
     }
   } else {
@@ -351,6 +379,7 @@ bool OpenSpaceTrajectoryProvider::IsVehicleNearDestination(
                              .is_near_destination_theta_threshold()) {
     ADEBUG << "vehicle reach end_pose";
     frame_->mutable_open_space_info()->set_destination_reached(true);
+    frame_->mutable_open_space_info()->set_openspace_planning_finish(true);
     return true;
   }
   return false;
@@ -430,18 +459,13 @@ void OpenSpaceTrajectoryProvider::LoadResult(
     double v = 0.3;
     double t = distance / v * 2;
     double a = v / t;
-    double start_x =
-        optimizer_trajectory_ptr->back().path_point().x();
-    double start_y =
-        optimizer_trajectory_ptr->back().path_point().y();
-    double start_time =
-        optimizer_trajectory_ptr->back().relative_time();
+    double start_x = optimizer_trajectory_ptr->back().path_point().x();
+    double start_y = optimizer_trajectory_ptr->back().path_point().y();
+    double start_time = optimizer_trajectory_ptr->back().relative_time();
     std::vector<double> end_pose =
         frame_->open_space_info().open_space_end_pose();
-    double unit_x =
-        -cos(optimizer_trajectory_ptr->back().path_point().theta());
-    double unit_y =
-        -sin(optimizer_trajectory_ptr->back().path_point().theta());
+    double unit_x = -cos(optimizer_trajectory_ptr->back().path_point().theta());
+    double unit_y = -sin(optimizer_trajectory_ptr->back().path_point().theta());
     for (size_t i = 1; i <= t / 0.1; i++) {
       double x = 0, y = 0, v_now = 0, a_now = 0;
       v_now = v - a * i * 0.1;
@@ -450,13 +474,12 @@ void OpenSpaceTrajectoryProvider::LoadResult(
       x = scale * unit_x;
       y = scale * unit_y;
       ADEBUG << start_x + x << ", " << start_y + y << ", "
-                << start_time + 0.1 * i << ", "
-                << v_now << ", " << a_now;
+             << start_time + 0.1 * i << ", " << v_now << ", " << a_now;
       TrajectoryPoint point;
       point.mutable_path_point()->set_x(start_x + x);
       point.mutable_path_point()->set_y(start_y + y);
       point.mutable_path_point()->set_theta(
-            optimizer_trajectory_ptr->back().path_point().theta());
+          optimizer_trajectory_ptr->back().path_point().theta());
       point.mutable_path_point()->set_s(0.0);
       point.mutable_path_point()->set_kappa(0.0);
       point.set_relative_time(start_time + 0.1 * i);

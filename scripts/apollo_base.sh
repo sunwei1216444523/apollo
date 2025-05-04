@@ -40,49 +40,14 @@ use_gpu=-1
 use_nvidia=-1
 use_amd=-1
 
+ENABLE_PROFILER=true
+
 function set_lib_path() {
   local CYBER_SETUP="${APOLLO_ROOT_DIR}/cyber/setup.bash"
   [ -e "${CYBER_SETUP}" ] && . "${CYBER_SETUP}"
   pathprepend ${APOLLO_ROOT_DIR}/modules/tools PYTHONPATH
   pathprepend ${APOLLO_ROOT_DIR}/modules/teleop/common PYTHONPATH
   pathprepend /apollo/modules/teleop/common/scripts
-}
-
-function site_restore() {
-  [[ -e "${TOP_DIR}/WORKSPACE.source" ]] && rm -f "${TOP_DIR}/WORKSPACE" && cp "${TOP_DIR}/WORKSPACE.source" "${TOP_DIR}/WORKSPACE"
-  echo "" > "${TOP_DIR}/tools/package/rules_cc.patch"
-  [[ -e "${TOP_DIR}/tools/proto/proto.bzl.tpl" ]] && rm -f "${TOP_DIR}/tools/proto/proto.bzl" && cp "${TOP_DIR}/tools/proto/proto.bzl.tpl" "${TOP_DIR}/tools/proto/proto.bzl"
-  if which buildtool > /dev/null 2>&1; then
-    sudo apt remove -y apollo-neo-buildtool
-  fi
-  # switch back to standalone mode to increase building speed
-  sed -i 's/build --spawn_strategy=sandboxed/build --spawn_strategy=standalone/' "${TOP_DIR}/tools/bazel.rc"
-  # recover ld cache
-  sudo bash -c "echo '/opt/apollo/sysroot/lib' > /etc/ld.so.conf.d/apollo.conf"
-  sudo bash -c "echo '/usr/local/fast-rtps/lib' >> /etc/ld.so.conf.d/apollo.conf"
-  sudo bash -c "echo '/opt/apollo/absl/lib' >> /etc/ld.so.conf.d/apollo.conf"
-  sudo bash -c "echo '/opt/apollo/pkgs/adv_plat/lib' >> /etc/ld.so.conf.d/apollo.conf"
-  return 0
-}
-
-function env_prepare() {
-  set +e
-  mkdir -p /opt/apollo/neo/src
-  dpkg -l apollo-neo-buildtool > /dev/null 2>&1
-  [[ $? -ne 0 ]] && set -e && sudo apt-get install -y ca-certificates curl gnupg && sudo install -m 0755 -d /etc/apt/keyrings &&
-    curl -fsSL https://apollo-pkg-beta.cdn.bcebos.com/neo/beta/key/deb.gpg.key | sudo gpg --dearmor -o /etc/apt/keyrings/apolloauto.gpg &&
-    sudo chmod a+r /etc/apt/keyrings/apolloauto.gpg && echo \
-    "deb [arch="$(dpkg --print-architecture)" signed-by=/etc/apt/keyrings/apolloauto.gpg] https://apollo-pkg-beta.cdn.bcebos.com/apollo/core" \
-    $(. /etc/os-release && echo "$VERSION_CODENAME") "main" | sudo tee /etc/apt/sources.list.d/apolloauto.list &&
-    sudo apt-get update && sudo apt-get install -y apollo-neo-buildtool apollo-neo-env-manager-dev &&
-    sudo touch /.installed && sudo sed -i 's/#include "flann\/general\.h"/#include <\/usr\/include\/flann\/general\.h>/g' /usr/include/flann/util/params.h
-  source /opt/apollo/neo/setup.sh
-  # currently, only sandboxed available in package managerment env
-  if cat "${TOP_DIR}/tools/bazel.rc" | grep standalone; then
-    sed -i 's/build --spawn_strategy=standalone/build --spawn_strategy=sandboxed/' "${TOP_DIR}/tools/bazel.rc"
-    rm -rf "${TOP_DIR}/.cache"
-  fi
-  return 0
 }
 
 function create_data_dir() {
@@ -562,18 +527,24 @@ function _determine_perception_disabled() {
 function _determine_localization_disabled() {
   if [ "${ARCH}" != "x86_64" ]; then
     # Skip msf for non-x86_64 platforms
-    DISABLED_TARGETS="${disabled} except //modules/localization/msf/..."
+    DISABLED_TARGETS="${DISABLED_TARGETS} except //modules/localization/msf/..."
   fi
 }
 
 function _determine_planning_disabled() {
   if [ "${USE_GPU}" -eq 0 ]; then
     DISABLED_TARGETS="${DISABLED_TARGETS} \
-        except //modules/planning/planning_base:planning_block"
+        except //modules/planning/planning_open_space:planning_block"
   fi
 }
 
 function determine_disabled_targets() {
+  if [[ -n "${CUSTOM_DISABLED_TARGETS}" ]]; then
+    disabled_targets=($(IFS=' ' echo "${CUSTOM_DISABLED_TARGETS}"))
+    for target in "${disabled_targets[@]}"; do
+      DISABLED_TARGETS="${DISABLED_TARGETS} except ${target}"
+    done
+  fi
   if [[ "$#" -eq 0 ]]; then
     _determine_drivers_disabled
     _determine_localization_disabled
@@ -692,6 +663,10 @@ function run_bazel() {
     CMDLINE_OPTIONS="${CMDLINE_OPTIONS} --define USE_ESD_CAN=${USE_ESD_CAN}"
   fi
 
+  if $ENABLE_PROFILER; then
+    CMDLINE_OPTIONS="${CMDLINE_OPTIONS} --define ENABLE_PROFILER=${ENABLE_PROFILER}"
+  fi
+
   CMDLINE_OPTIONS="$(echo ${CMDLINE_OPTIONS} | xargs)"
 
   local build_targets="$(determine_targets ${SHORTHAND_TARGETS})"
@@ -730,12 +705,17 @@ function run_bazel() {
   info "${TAB}$1 Targets: ${sp}${GREEN}${build_targets}${NO_COLOR}"
   info "${TAB}Disabled:      ${spaces}${YELLOW}${disabled_targets}${NO_COLOR}"
 
-  if [[ "$(uname -m)" == "x86_64" ]]; then
-    job_args="--copt=-mavx2 --host_copt=-mavx2 --jobs=${count} --local_ram_resources=HOST_RAM*0.7"
+  if [[ -n "${CUSTOM_JOB_ARGS}" ]]; then
+    job_args="${CUSTOM_JOB_ARGS}"
   else
-    job_args="--copt=-march=native --host_copt=-march=native --jobs=${count} --local_ram_resources=HOST_RAM*0.7 --copt=-fPIC --host_copt=-fPIC"
+    if [[ $(uname -m) == "x86_64" ]]; then
+      job_args="--copt=-mavx2 --host_copt=-mavx2 --jobs=${count} --local_ram_resources=HOST_RAM*0.7"
+    else
+      job_args="--copt=-march=native --host_copt=-march=native --jobs=${count} --local_ram_resources=HOST_RAM*0.7  --copt=-fPIC --host_copt=-fPIC"
+    fi
   fi
   set -x
+  [[ ${1} == "Test" ]] && CMDLINE_OPTIONS="${CMDLINE_OPTIONS} --action_env APOLLO_CONF_PATH=${APOLLO_CONF_PATH}"
   bazel ${1,,} ${CMDLINE_OPTIONS} ${job_args} -- ${formatted_targets}
   set +x
 }

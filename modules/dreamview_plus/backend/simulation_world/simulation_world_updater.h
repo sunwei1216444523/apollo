@@ -135,12 +135,6 @@ class SimulationWorldUpdater : public UpdaterBase {
   bool ConstructLaneWayPoint(const nlohmann::json &point,
                              apollo::routing::LaneWaypoint *laneWayPoint,
                              std::string description);
-  /**
-   * @brief Check if a process exists
-   * @param process_name The name of the process to check
-   * @return True if the process exists
-   */
-  bool isProcessRunning(const std::string &process_name);
 
   bool ValidateCoordinate(const nlohmann::json &json);
 
@@ -200,14 +194,6 @@ class SimulationWorldUpdater : public UpdaterBase {
   //    */
   //   bool ModifyCycleNumber(const std::string &routing_name,
   //                          const int &cycle_number);
-
-  /**
-   * @brief Determine whether the current route can form a circular route
-   * @param json JSON file containing start and end points
-   * @param result Messages accompanying the check
-   * @return true if enabled, false otherwise.
-   */
-  bool CheckCycleRouting(const nlohmann::json &json, nlohmann::json &result);
 
   void RegisterMessageHandlers();
   void RegisterRoutingMessageHandlers();

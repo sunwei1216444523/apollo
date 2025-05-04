@@ -1,7 +1,10 @@
+/* eslint-disable prettier/prettier */
 /* eslint-disable no-param-reassign */
-import cloneDeep from 'lodash/cloneDeep';
+import assign from 'lodash/assign';
 import isEqual from 'lodash/isEqual';
 import isArray from 'lodash/isArray';
+import uniq from 'lodash/uniq';
+import difference from 'lodash/difference';
 import * as TYPES from './actionTypes';
 
 export const hmiUtils = {
@@ -50,7 +53,7 @@ function isEqualDeep(prev: any, next: any) {
     }
     return isEqual(prev, next);
 }
-
+let simHmiKeys: string[] = [];
 export const reducerHander = {
     changeVehicle(vehicle: string) {
         console.log('vehicle', vehicle);
@@ -74,12 +77,22 @@ export const reducerHander = {
     updateCurrentMode: (draftHmi: any, mode: string) => {
         draftHmi.currentMode = mode;
     },
-    toggleModule(hmi: TYPES.IInitState, prop: { key: string }) {
+    toggleModule(_hmi: TYPES.IInitState, prop: { key: string }) {
         console.log('module', prop);
     },
     updateStatusSimp: (originHmi: any, draftHmi: any, newStatus: any) => {
-        const prevStatus = cloneDeep(originHmi.prevStatus);
-        Object.keys(newStatus).forEach((key: string) => {
+        const prevStatus = originHmi?.prevStatus;
+        const isFromSimHmi = newStatus.frontendIsFromSimHmi;
+        if (isFromSimHmi) {
+            simHmiKeys = Object.keys(newStatus);
+        }
+        const keys = isFromSimHmi
+            ? Object.keys(newStatus)
+            : difference(
+                uniq([...Object.keys(newStatus), ...Object.keys(prevStatus || {})]),
+                simHmiKeys,
+            );
+        keys.forEach((key: string) => {
             const prevValue = prevStatus[key];
             const newValue = newStatus[key];
             if (isEqual(prevValue, newValue)) {
@@ -92,20 +105,26 @@ export const reducerHander = {
                     newStatus.currentScenarioId,
                     newStatus.scenarioSet,
                 );
-            } else if (['modules', 'modulesLock'].includes(key)) {
-                draftHmi[key] = new Map(Object.entries(newValue).sort());
             } else if (key === 'currentRecordStatus') {
                 draftHmi.currentRecordId = newStatus.currentRecordStatus?.currentRecordId;
                 draftHmi.currentRecordStatus = newStatus.currentRecordStatus;
-            } else if (isArray(prevValue) && isArray(newValue)) {
-                draftHmi[key] = newStatus[key].sort();
+            } else if (key === 'modules') {
+                draftHmi.modules = new Map(
+                    Object.entries(newStatus.modules ?? []).sort(([prev]: any, [next]: any) => (prev > next ? 1 : -1)),
+                );
+            } else if (key === 'modulesLock') {
+                draftHmi.modulesLock = new Map(
+                    Object.entries(newStatus.modulesLock ?? []).sort(([prev]: any, [next]: any) =>
+                        (prev > next ? 1 : -1),
+                    ),
+                );
+            } else if (isArray(prevValue) || isArray(newValue)) {
+                draftHmi[key] = (newValue || []).sort((prev: any, next: any) => (prev > next ? 1 : -1));
             } else {
                 draftHmi[key] = newStatus[key];
             }
         });
 
-        draftHmi.backendShutdown = newStatus.backendShutdown;
-
-        draftHmi.prevStatus = newStatus;
+        assign(draftHmi.prevStatus, newStatus);
     },
 };

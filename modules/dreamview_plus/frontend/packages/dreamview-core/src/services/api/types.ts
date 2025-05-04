@@ -14,12 +14,19 @@ export enum MainApiTypes {
     StartPlayRtkRecorder = 'StartPlayRtkRecorder',
     PlayRecorderAction = 'PlayRecorderAction',
     HMIAction = 'HMIAction',
+    SimHMIAction = 'SimHMIAction',
     Dump = 'Dump',
     Reset = 'Reset',
     GetDataHandlerConf = 'GetDataHandlerConf',
     TriggerPncMonitor = 'TriggerPncMonitor',
     GetDefaultRoutings = 'GetDefaultRoutings',
     SendScenarioSimulationRequest = 'SendScenarioSimulationRequest',
+    CheckMapCollectStatus = 'CheckMapCollectStatus',
+    StartRecordMapData = 'StartRecordMapData',
+    StopRecordMapData = 'StopRecordMapData',
+    StartMapCreator = 'StartMapCreator',
+    BreakMapCreator = 'BreakMapCreator',
+    ExportMapFile = 'ExportMapFile',
     StopScenarioSimulation = 'StopScenarioSimulation',
     ResetScenarioSimulation = 'ResetScenarioSimulation',
     DeleteDefaultRouting = 'DeleteDefaultRouting',
@@ -37,10 +44,13 @@ export enum MainApiTypes {
     AddObjectStore = 'AddOrModifyObjectToDB',
     DeleteObjectStore = 'DeleteObjectToDB',
     PutObjectStore = 'AddOrModifyObjectToDB',
+    putChartObjectStore = 'AddOrModifyObjectToDB',
     GetObjectStore = 'GetObjectFromDB',
     GetTuplesObjectStore = 'GetTuplesWithTypeFromDB',
     StartTerminal = 'StartTerminal',
     RequestRoutePath = 'RequestRoutePath',
+    GetCurrentLayout = 'GetCurrentLayout',
+    GetDefaultLayout = 'GetDefaultLayout',
 }
 
 /**
@@ -51,12 +61,23 @@ export enum PluginApiTypes {
 }
 
 /**
+ * 其他API类型枚举
+ */
+export enum OtherApiTypes {
+    SendScenarioSimulationRequest = 'SendScenarioSimulationRequest',
+    StopScenarioSimulation = 'StopScenarioSimulation',
+    ResetScenarioSimulation = 'ResetScenarioSimulation',
+}
+
+/**
  * 流数据名称枚举
  */
 export enum StreamDataNames {
     SIM_WORLD = 'simworld',
     CAMERA = 'camera',
     HMI_STATUS = 'hmistatus',
+    // 仿真专用HMI数据
+    SIM_HMI_STATUS = 'simhmistatus',
     POINT_CLOUD = 'pointcloud',
     Map = 'map',
     Obstacle = 'obstacle',
@@ -104,6 +125,7 @@ export enum HMIActions {
     LoadRecord = 'LOAD_RECORD',
     LoadScenarios = 'LOAD_SCENARIOS',
     LoadRTKRecords = 'LOAD_RTK_RECORDS',
+    LoadMaps = 'LOAD_MAPS',
     ChangeRecord = 'CHANGE_RECORD',
     ChangeRTKRecord = 'CHANGE_RTK_RECORD',
     DeleteRecord = 'DELETE_RECORD',
@@ -121,10 +143,18 @@ export enum HMIActions {
 }
 
 /**
+ * SIM操作枚举
+ */
+export enum SimHMIAction {
+    LOAD_SCENARIOS = 'LOAD_SCENARIOS',
+    CHANGE_SCENARIO = 'CHANGE_SCENARIO',
+}
+
+/**
  * HMI数据负载类型
  */
 export type HMIDataPayload = {
-    action: HMIActions;
+    action: HMIActions | SimHMIAction;
     value?: string;
 };
 
@@ -140,6 +170,7 @@ export type AccountInfo = {
     avatar_url: string;
     displayname: string;
     id: string;
+    map_prerogative: boolean;
 };
 
 export type VehicleInfoRecord = {
@@ -197,6 +228,8 @@ export type ScenarioSet = {
             status: ENUM_DOWNLOAD_STATUS;
         };
     };
+    public: boolean;
+    category: string;
     percentage: number;
     resource_id: string;
     resource_type: 'scenario';
@@ -320,6 +353,49 @@ export type GetMapElementsByIdsInfo = {
     };
 };
 
+export enum CHECK_MAP_COLLECT_STATUS {
+    OK = 'Ok',
+    LOADING = 'Loading',
+    WARNING = 'Warning',
+    ERROR = 'Error',
+}
+
+export type CheckMapCollectInfo = {
+    Gps: {
+        info: string;
+        status: CHECK_MAP_COLLECT_STATUS;
+    };
+    Lidar: {
+        info: string;
+        status: CHECK_MAP_COLLECT_STATUS;
+    };
+    Localization: {
+        info: string;
+        status: CHECK_MAP_COLLECT_STATUS;
+    };
+    Lidar2world: {
+        info: string;
+        status: CHECK_MAP_COLLECT_STATUS;
+    };
+};
+
+export enum CREATE_MAP_FILE_STATUS {
+    OK = 'Ok',
+    CREATING = 'Creating',
+    ERROR = 'Error',
+}
+
+export type CreateMapFileInfo = {
+    progress: number;
+    mapFilePath: string;
+    mapCreatorTime?: string;
+    status: CREATE_MAP_FILE_STATUS;
+};
+
+export type ExportMapFileInfo = {
+    map_file_url: string;
+};
+
 export type HMIActionsOperationInfo = {
     isOk: boolean;
 };
@@ -330,6 +406,8 @@ export type HDMapSwitchInfo = {
 
 export enum OBJECT_STORE_TYPE {
     CHART = 'chart',
+    CURRENT_LAYOUT = 'CurrentLayout',
+    INIT_LATOUR = 'InitLayout',
 }
 export interface IAddObjectStoreParams {
     key: string;

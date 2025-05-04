@@ -25,9 +25,11 @@
 #include <vector>
 
 #include "gflags/gflags.h"
+
 #include "modules/common/vehicle_state/proto/vehicle_state.pb.h"
 #include "modules/common_msgs/planning_msgs/planning_command.pb.h"
 #include "modules/common_msgs/routing_msgs/routing.pb.h"
+
 #include "modules/map/pnc_map/route_segments.h"
 
 namespace apollo {
@@ -85,8 +87,19 @@ class PncMapBase {
    */
   virtual hdmap::LaneInfoConstPtr GetLaneById(const hdmap::Id &id) const = 0;
 
+  virtual bool GetNearestPointFromRouting(
+      const common::VehicleState &state,
+      apollo::hdmap::LaneWaypoint *waypoint) const = 0;
+
+  virtual double GetDistanceToDestination() const = 0;
+  virtual apollo::hdmap::LaneWaypoint GetAdcWaypoint() const = 0;
+
  protected:
   planning::PlanningCommand last_command_;
+  /**
+   * The waypoint of the autonomous driving car
+   */
+  apollo::hdmap::LaneWaypoint adc_waypoint_;
 
  private:
   /**

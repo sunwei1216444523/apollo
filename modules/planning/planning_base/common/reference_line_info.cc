@@ -57,7 +57,22 @@ ReferenceLineInfo::ReferenceLineInfo(const common::VehicleState& vehicle_state,
     : vehicle_state_(vehicle_state),
       adc_planning_point_(adc_planning_point),
       reference_line_(reference_line),
-      lanes_(segments) {}
+      lanes_(segments) {
+  if (lanes_.size() == 0) {
+    return;
+  }
+  std::ostringstream segs_id;
+  segs_id.setf(std::ios::fixed);
+  segs_id.precision(2);
+  segs_id.str("");
+  for (const auto& seg : lanes_) {
+    segs_id << "_" << seg.lane->id().id();
+  }
+
+  segs_id << "_" << lanes_.front().start_s << "_" << lanes_.back().end_s;
+  key_ = cyber::common::Hash(segs_id.str());
+  id_ = segs_id.str();
+}
 
 bool ReferenceLineInfo::Init(const std::vector<const Obstacle*>& obstacles,
                              double target_speed) {
@@ -90,10 +105,12 @@ bool ReferenceLineInfo::Init(const std::vector<const Obstacle*>& obstacles,
           << " is not on reference line:[0, " << reference_line_.Length()
           << "]";
   }
-  static constexpr double kOutOfReferenceLineL = 10.0;  // in meters
+  static constexpr double kOutOfReferenceLineL = 14.0;  // in meters
   if (adc_sl_boundary_.start_l() > kOutOfReferenceLineL ||
       adc_sl_boundary_.end_l() < -kOutOfReferenceLineL) {
-    AERROR << "Ego vehicle is too far away from reference line.";
+    AERROR << "Ego vehicle is too far away from reference line."
+           << "adc_sl_boundary_.start_l:" << adc_sl_boundary_.start_l()
+           << "adc_sl_boundary_.end_l:" << adc_sl_boundary_.end_l();
     return false;
   }
   is_on_reference_line_ = reference_line_.IsOnLane(adc_sl_boundary_);
@@ -291,6 +308,12 @@ void ReferenceLineInfo::InitFirstOverlaps() {
     first_encounter_overlaps_.emplace_back(YIELD_SIGN, yield_sign_overlap);
   }
 
+  // area
+  hdmap::PathOverlap area_overlap;
+  if (GetFirstOverlap(map_path.area_overlaps(), &area_overlap)) {
+    first_encounter_overlaps_.emplace_back(AREA, area_overlap);
+  }
+
   // sort by start_s
   if (!first_encounter_overlaps_.empty()) {
     std::sort(first_encounter_overlaps_.begin(),
@@ -400,9 +423,9 @@ Obstacle* ReferenceLineInfo::AddObstacle(const Obstacle* obstacle) {
                                       ignore);
     path_decision_.AddLongitudinalDecision("reference_line_filter",
                                            obstacle->Id(), ignore);
-    ADEBUG << "NO build reference line st boundary. id:" << obstacle->Id();
+    AINFO << "NO build reference line st boundary. id:" << obstacle->Id();
   } else {
-    ADEBUG << "build reference line st boundary. id:" << obstacle->Id();
+    AINFO << "build reference line st boundary. id:" << obstacle->Id();
     mutable_obstacle->BuildReferenceLineStBoundary(reference_line_,
                                                    adc_sl_boundary_.start_s());
 
@@ -447,11 +470,11 @@ bool ReferenceLineInfo::IsIrrelevantObstacle(const Obstacle& obstacle) {
   }
   // if adc is on the road, and obstacle behind adc, ignore
   const auto& obstacle_boundary = obstacle.PerceptionSLBoundary();
-  if (obstacle_boundary.end_s() > reference_line_.Length()) {
+  if (obstacle_boundary.start_s() > reference_line_.Length()) {
     return true;
   }
   if (is_on_reference_line_ && !IsChangeLanePath() &&
-      adc_sl_boundary_.end_s() - obstacle_boundary.end_s() >
+      adc_sl_boundary_.start_s() - obstacle_boundary.end_s() >
           FLAGS_obstacle_lon_ignore_buffer &&
       (reference_line_.IsOnLane(obstacle_boundary) ||
        obstacle_boundary.end_s() < 0.0)) {  // if obstacle is far backward
@@ -547,6 +570,18 @@ bool ReferenceLineInfo::CombinePathAndSpeedProfile(
     trajectory_point.set_a(speed_point.a());
     trajectory_point.set_relative_time(speed_point.t() + relative_time);
     ptr_discretized_trajectory->AppendTrajectoryPoint(trajectory_point);
+  }
+  if (path_data_.is_reverse_path()) {
+    std::for_each(ptr_discretized_trajectory->begin(),
+                  ptr_discretized_trajectory->end(),
+                  [](common::TrajectoryPoint& trajectory_point) {
+                    trajectory_point.set_v(-trajectory_point.v());
+                    trajectory_point.set_a(-trajectory_point.a());
+                    trajectory_point.mutable_path_point()->set_s(
+                        -trajectory_point.path_point().s());
+                  });
+    AINFO << "reversed path";
+    ptr_discretized_trajectory->SetIsReversed(true);
   }
   return true;
 }
@@ -657,6 +692,25 @@ std::string ReferenceLineInfo::PathSpeedDebugString() const {
                       "speed_data:", speed_data_.DebugString());
 }
 
+bool ReferenceLineInfo::IsEgoOnRoutingLane() const {
+  double ego_x = vehicle_state_.x();
+  double ego_y = vehicle_state_.y();
+  double lane_left_width = 0;
+  double lane_right_width = 0;
+  common::SLPoint sl_point;
+  reference_line_.XYToSL({ego_x, ego_y}, &sl_point);
+  reference_line_.GetLaneWidth(sl_point.s(), &lane_left_width,
+                               &lane_right_width);
+  ADEBUG << "s: " << sl_point.s() << " l: " << sl_point.l()
+         << " lane_left_width: " << lane_left_width
+         << " lane_right_width: " << lane_right_width;
+  if (lane_left_width >= sl_point.l() && -lane_right_width <= sl_point.l()) {
+    return true;
+  } else {
+    return false;
+  }
+}
+
 void ReferenceLineInfo::SetTurnSignalBasedOnLaneTurnType(
     common::VehicleSignal* vehicle_signal) const {
   CHECK_NOTNULL(vehicle_signal);
@@ -677,12 +731,29 @@ void ReferenceLineInfo::SetTurnSignalBasedOnLaneTurnType(
   }
 
   // Set turn signal based on lane-borrow.
-  if (path_data_.path_label().find("left") != std::string::npos) {
+  bool is_ego_on_routing_lane = IsEgoOnRoutingLane();
+  if (path_data_.path_label().find("left") != std::string::npos &&
+      is_ego_on_routing_lane) {
     vehicle_signal->set_turn_signal(VehicleSignal::TURN_LEFT);
+    AINFO << "Set turn signal to left";
     return;
   }
-  if (path_data_.path_label().find("right") != std::string::npos) {
+  if (path_data_.path_label().find("left") != std::string::npos &&
+      !is_ego_on_routing_lane) {
     vehicle_signal->set_turn_signal(VehicleSignal::TURN_RIGHT);
+    AINFO << "Set turn signal to right";
+    return;
+  }
+  if (path_data_.path_label().find("right") != std::string::npos &&
+      is_ego_on_routing_lane) {
+    vehicle_signal->set_turn_signal(VehicleSignal::TURN_RIGHT);
+    AINFO << "Set turn signal to right";
+    return;
+  }
+  if (path_data_.path_label().find("right") != std::string::npos &&
+      !is_ego_on_routing_lane) {
+    vehicle_signal->set_turn_signal(VehicleSignal::TURN_LEFT);
+    AINFO << "Set turn signal to left";
     return;
   }
 
@@ -700,9 +771,11 @@ void ReferenceLineInfo::SetTurnSignalBasedOnLaneTurnType(
     const auto& turn = seg.lane->lane().turn();
     if (turn == hdmap::Lane::LEFT_TURN) {
       vehicle_signal->set_turn_signal(VehicleSignal::TURN_LEFT);
+      AINFO << "Set turn signal to left";
       break;
     } else if (turn == hdmap::Lane::RIGHT_TURN) {
       vehicle_signal->set_turn_signal(VehicleSignal::TURN_RIGHT);
+      AINFO << "Set turn signal to right";
       break;
     } else if (turn == hdmap::Lane::U_TURN) {
       // check left or right by geometry.
@@ -741,7 +814,11 @@ void ReferenceLineInfo::ExportVehicleSignal(
 
 bool ReferenceLineInfo::ReachedDestination() const {
   const double distance_destination = SDistanceToDestination();
-  return distance_destination <= FLAGS_passed_destination_threshold;
+  const double distance_ref_end = SDistanceToRefEnd();
+  AINFO << "distance_destination:" << distance_destination
+        << "distance_ref_end: " << distance_ref_end;
+  return distance_destination <= FLAGS_passed_destination_threshold ||
+         distance_ref_end <= FLAGS_passed_referenceline_end_threshold;
 }
 
 double ReferenceLineInfo::SDistanceToDestination() const {
@@ -758,7 +835,39 @@ double ReferenceLineInfo::SDistanceToDestination() const {
   }
   const double stop_s = dest_ptr->PerceptionSLBoundary().start_s() +
                         dest_ptr->LongitudinalDecision().stop().distance_s();
+  AINFO << "stop_s: " << stop_s << "end_s: " << adc_sl_boundary_.end_s();
   return stop_s - adc_sl_boundary_.end_s();
+}
+
+double ReferenceLineInfo::SDistanceToRefEnd() const {
+  double res = std::numeric_limits<double>::max();
+
+  std::string ref_end_id;
+  for (const auto* obstacle : path_decision_.obstacles().Items()) {
+    std::string id = obstacle->Id();
+    if (id.find("REF_END") != std::string::npos) {
+      ref_end_id = id;
+      AINFO << "Found reference line end id: " << ref_end_id;
+    } else {
+      continue;
+    }
+  }
+  if (!ref_end_id.empty()) {
+    AINFO << "REF_END: " << ref_end_id;
+    const auto* ref_end_ptr = path_decision_.Find(ref_end_id);
+    AINFO << "ref_end_ptr:" << ref_end_ptr->DebugString();
+    if (!ref_end_ptr && !ref_end_ptr->LongitudinalDecision().has_stop() &&
+        !reference_line_.IsOnLane(
+            ref_end_ptr->PerceptionBoundingBox().center())) {
+      const double stop_s =
+          ref_end_ptr->PerceptionSLBoundary().start_s() +
+          ref_end_ptr->LongitudinalDecision().stop().distance_s();
+      AINFO << "REF_END: stop_s: " << stop_s
+            << "end_s: " << adc_sl_boundary_.end_s();
+      res = stop_s - adc_sl_boundary_.end_s();
+    }
+  }
+  return res;
 }
 
 void ReferenceLineInfo::ExportDecision(
@@ -799,11 +908,14 @@ void ReferenceLineInfo::MakeMainMissionCompleteDecision(
   }
   auto main_stop = decision_result->main_decision().stop();
   if (main_stop.reason_code() != STOP_REASON_DESTINATION &&
-      main_stop.reason_code() != STOP_REASON_PULL_OVER) {
+      main_stop.reason_code() != STOP_REASON_PULL_OVER &&
+      main_stop.reason_code() != STOP_REASON_REFERENCE_END) {
     return;
   }
   const double distance_destination = SDistanceToDestination();
-  if (distance_destination > FLAGS_destination_check_distance) {
+  const double distance_to_reference_end = SDistanceToRefEnd();
+  if (distance_destination > FLAGS_destination_check_distance &&
+      distance_to_reference_end > FLAGS_destination_check_distance) {
     return;
   }
 
@@ -1028,6 +1140,22 @@ int ReferenceLineInfo::GetJunction(const double s,
   return 0;
 }
 
+int ReferenceLineInfo::GetArea(const double s,
+                               hdmap::PathOverlap* area_overlap) const {
+  CHECK_NOTNULL(area_overlap);
+  const std::vector<hdmap::PathOverlap>& area_overlaps =
+      reference_line_.map_path().area_overlaps();
+
+  static constexpr double kError = 1.0;  // meter
+  for (const auto& overlap : area_overlaps) {
+    if (s >= overlap.start_s - kError && s <= overlap.end_s + kError) {
+      *area_overlap = overlap;
+      return 1;
+    }
+  }
+  return 0;
+}
+
 void ReferenceLineInfo::SetBlockingObstacle(
     const std::string& blocking_obstacle_id) {
   blocking_obstacle_ = path_decision_.Find(blocking_obstacle_id);
@@ -1099,9 +1227,94 @@ hdmap::PathOverlap* ReferenceLineInfo::GetOverlapOnReferenceLine(
         return const_cast<hdmap::PathOverlap*>(&yield_sign_overlap);
       }
     }
+  } else if (overlap_type == ReferenceLineInfo::JUNCTION) {
+    // junction_overlap
+    const auto& junction_overlaps =
+        reference_line_.map_path().junction_overlaps();
+    for (const auto& junction_overlap : junction_overlaps) {
+      if (junction_overlap.object_id == overlap_id) {
+        return const_cast<hdmap::PathOverlap*>(&junction_overlap);
+      }
+    }
+  } else if (overlap_type == ReferenceLineInfo::AREA) {
+    // area_overlap
+    const auto& area_overlaps = reference_line_.map_path().area_overlaps();
+    for (const auto& area_overlap : area_overlaps) {
+      if (area_overlap.object_id == overlap_id) {
+        return const_cast<hdmap::PathOverlap*>(&area_overlap);
+      }
+    }
   }
 
   return nullptr;
+}
+std::vector<PathData>* ReferenceLineInfo::MutableCandidatePathData() {
+  return &candidate_path_data_;
+}
+
+void ReferenceLineInfo::GetRangeOverlaps(
+    std::vector<hdmap::PathOverlap>* path_overlaps, double start_s,
+    double end_s) {
+  CHECK_NOTNULL(path_overlaps);
+  const std::vector<hdmap::PathOverlap>& junction_overlaps =
+      reference_line_.map_path().junction_overlaps();
+
+  static constexpr double kError = 0.1;  // meter
+  AINFO << "GetRangeOverlaps start_s: " << start_s << ", end_s: " << end_s;
+  for (const auto& overlap : junction_overlaps) {
+    if (start_s >= overlap.end_s - kError) {
+      continue;
+    } else if (end_s < overlap.start_s - kError) {
+      break;
+    } else {
+      AINFO << "overlap emplace_back " << overlap.start_s << ", "
+            << overlap.end_s << " ]";
+      path_overlaps->emplace_back(overlap);
+    }
+  }
+}
+
+const std::vector<double>& ReferenceLineInfo::reference_line_towing_l() const {
+  return reference_line_towing_l_;
+}
+
+std::vector<double>* ReferenceLineInfo::mutable_reference_line_towing_l() {
+  return &reference_line_towing_l_;
+}
+
+const PathBoundary& ReferenceLineInfo::reference_line_towing_path_boundary()
+    const {
+  return reference_line_towing_path_boundary_;
+}
+
+PathBoundary* ReferenceLineInfo::mutable_reference_line_towing_path_boundary() {
+  return &reference_line_towing_path_boundary_;
+}
+
+void ReferenceLineInfo::PrintReferenceSegmentDebugString() {
+  PrintCurves print_curve;
+  const auto& lane_segments = reference_line_.GetMapPath().lane_segments();
+  for (size_t i = 0; i < lane_segments.size(); ++i) {
+    for (const auto& seg :
+         lane_segments.at(i).lane->lane().left_boundary().curve().segment()) {
+      for (const auto& pt : seg.line_segment().point()) {
+        print_curve.AddPoint(std::to_string(index_) + "_left_pt_print", pt.x(),
+                             pt.y());
+      }
+    }
+    for (const auto& seg :
+         lane_segments.at(i).lane->lane().right_boundary().curve().segment()) {
+      for (const auto& pt : seg.line_segment().point()) {
+        print_curve.AddPoint(std::to_string(index_) + "_right_pt_print", pt.x(),
+                             pt.y());
+      }
+    }
+    for (const auto& pt : lane_segments.at(i).lane->points()) {
+      print_curve.AddPoint(std::to_string(index_) + "_center_pt_print", pt.x(),
+                           pt.y());
+    }
+  }
+  print_curve.PrintToLog();
 }
 
 }  // namespace planning

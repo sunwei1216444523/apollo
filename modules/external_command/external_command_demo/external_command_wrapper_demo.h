@@ -27,6 +27,7 @@
 #include "modules/common_msgs/external_command_msgs/path_follow_command.pb.h"
 #include "modules/common_msgs/external_command_msgs/speed_command.pb.h"
 #include "modules/common_msgs/external_command_msgs/valet_parking_command.pb.h"
+#include "modules/common_msgs/external_command_msgs/zone_cover_command.pb.h"
 #include "modules/common_msgs/planning_msgs/planning.pb.h"
 #include "modules/external_command/external_command_demo/proto/demo_config.pb.h"
 
@@ -77,10 +78,14 @@ class ExternalCommandWrapperDemo final : public apollo::cyber::TimerComponent {
       const std::vector<apollo::external_command::Point>& way_points,
       const apollo::external_command::Pose& end);
 
-  static void ReadPathFromPathRecord(
+  void SendZoneCoverCommand(const std::string overlap_id);
+
+  void ReadPathFromPathRecord(
       const std::string& record_file,
       google::protobuf::RepeatedPtrField<apollo::external_command::Point>*
-          waypoints);
+          waypoints,
+      std::vector<apollo::external_command::Point>& left_boundary_points,
+      std::vector<apollo::external_command::Point>& right_boundary_points);
 
   void ReadPathFromLocationRecord(
       const std::string& record_file,
@@ -99,6 +104,12 @@ class ExternalCommandWrapperDemo final : public apollo::cyber::TimerComponent {
       apollo::common::ClientWrapper<apollo::external_command::FreeSpaceCommand,
                                     apollo::external_command::CommandStatus>>
       free_space_command_client_;
+
+  std::shared_ptr<
+      apollo::common::ClientWrapper<apollo::external_command::ZoneCoverCommand,
+                                    apollo::external_command::CommandStatus>>
+      zone_cover_command_client_;
+
   std::shared_ptr<
       apollo::common::ClientWrapper<apollo::external_command::LaneFollowCommand,
                                     apollo::external_command::CommandStatus>>

@@ -20,11 +20,15 @@
 
 #pragma once
 
+#include <map>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include <vector>
-#include <map>
 
+#include <google/protobuf/util/message_differencer.h>
+#include <pcl/common/transforms.h>
+#include <Eigen/Dense>
 #include <boost/thread/locks.hpp>
 #include <boost/thread/shared_mutex.hpp>
 
@@ -33,13 +37,17 @@
 
 #include "modules/common_msgs/localization_msgs/localization.pb.h"
 #include "modules/common_msgs/sensor_msgs/pointcloud.pb.h"
+#include "modules/common_msgs/transform_msgs/transform.pb.h"
 #include "modules/dreamview_plus/proto/data_handler.pb.h"
-#include "modules/dreamview_plus/backend/updater/updater_with_channels_base.h"
+#include "modules/common_msgs/perception_msgs/perception_obstacle.pb.h"
 
 #include "cyber/common/log.h"
 #include "cyber/cyber.h"
+#include "modules/transform/buffer.h"
 #include "modules/common/util/string_util.h"
 #include "modules/dreamview/backend/common/handlers/websocket_handler.h"
+#include "modules/dreamview_plus/backend/updater/updater_with_channels_base.h"
+
 /**
  * @namespace apollo::dreamview
  * @brief apollo::dreamview
@@ -48,8 +56,10 @@ namespace apollo {
 namespace dreamview {
 
 struct PointCloudChannelUpdater {
-  std::string curr_channel_name_;
+  std::string cur_channel_name_;
   std::shared_ptr<cyber::Reader<drivers::PointCloud>> point_cloud_reader_;
+  std::shared_ptr<cyber::Reader<apollo::perception::PerceptionEdgeInfo>>
+      perception_edge_reader_;
   double last_point_cloud_time_;
   // The PointCloud to be pushed to frontend.
   std::string point_cloud_str_;
@@ -57,8 +67,9 @@ struct PointCloudChannelUpdater {
   std::atomic<bool> future_ready_;
   std::future<void> async_future_;
   explicit PointCloudChannelUpdater(std::string channel_name)
-      : curr_channel_name_(channel_name),
+      : cur_channel_name_(channel_name),
         point_cloud_reader_(nullptr),
+        perception_edge_reader_(nullptr),
         last_point_cloud_time_(0.0),
         point_cloud_str_(""),
         future_ready_(true) {}
@@ -82,7 +93,6 @@ class PointCloudUpdater : public UpdaterWithChannelsBase {
   ~PointCloudUpdater();
   // dreamview callback function
   // using DvCallback = std::function<bool(const std::string &string)>;
-  static void LoadLidarHeight(const std::string &file_path);
 
   /**
    * @brief Starts to push PointCloud to frontend.
@@ -103,6 +113,10 @@ class PointCloudUpdater : public UpdaterWithChannelsBase {
   static boost::shared_mutex mutex_;
 
  private:
+  void UpdatePerceptionEdge(
+      const std::shared_ptr<apollo::perception::PerceptionEdgeInfo>
+          &perception_edge,
+      const std::string &channel_name);
   void UpdatePointCloud(const std::shared_ptr<drivers::PointCloud> &point_cloud,
                         const std::string &channel_name);
 
@@ -113,10 +127,14 @@ class PointCloudUpdater : public UpdaterWithChannelsBase {
       const std::shared_ptr<apollo::localization::LocalizationEstimate>
           &localization);
   pcl::PointCloud<pcl::PointXYZ>::Ptr ConvertPCLPointCloud(
-      const std::shared_ptr<drivers::PointCloud> &point_cloud);
+      const std::shared_ptr<drivers::PointCloud> &point_cloud,
+      const std::string &channel_name);
 
   PointCloudChannelUpdater* GetPointCloudChannelUpdater(
     const std::string &channel_name);
+
+  void TransformPointCloud(pcl::PointCloud<pcl::PointXYZ>::Ptr &point_cloud,
+                           const std::string &frame_id);
 
   constexpr static float kDefaultLidarHeight = 1.91f;
 

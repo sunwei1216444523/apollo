@@ -101,6 +101,9 @@ class ReferenceLineProvider {
 
   hdmap::LaneInfoConstPtr GetLaneById(const hdmap::Id& id) const;
 
+  bool GetAdcWaypoint(hdmap::LaneWaypoint* waypoint) const;
+  bool GetAdcDis2Destination(double *dis) const;
+
  private:
   /**
    * @brief Use LaneFollowMap to create reference line and the corresponding
